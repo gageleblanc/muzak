@@ -1,0 +1,3 @@
+[console_scripts]
+muzak = muzak.cli.__main__:cli
+
