@@ -7,3 +7,5 @@ dist
 dist/
 reqs
 reqs/
+*.egg-info
+*.egg-info/

@@ -77,6 +77,7 @@ class MuzakCLI:
         """
         Validate saved muzak cache and remove missing files
         """
+        self.muzak = Muzak(debug=self.debug)
         self.muzak.validate_cache()
 
     def scan(self, path: str):
