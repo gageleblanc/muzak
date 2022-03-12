@@ -2,6 +2,7 @@ from clilib.config.config_loader import JSONConfigurationFile
 from clilib.util.logging import Logging
 from pathlib import Path
 import shutil
+import json
 import re
 import os
 
@@ -9,6 +10,7 @@ import os
 class MuzakStorageDriver:
     def __init__(self, storage_path: str, muzak_config: JSONConfigurationFile, debug: bool = False):
         self.storage_path = storage_path
+        self._cache_path = str(Path(storage_path).joinpath(".muzakscan"))
         self.debug = debug
         self.config = muzak_config
         self.logger = Logging("Muzak", "StorageDriver", debug=debug).get_logger()
@@ -33,6 +35,47 @@ class MuzakStorageDriver:
             fmt_tag = "<%s>" % tag
             fmt = fmt.replace(fmt_tag, value)
         return fmt
+
+    def _load_cache(self):
+        cache_data = {"files": [], "music": {}}
+        if Path(self._cache_path).exists():
+            with open(self._cache_path) as f:
+                cache_data = json.load(f)
+        
+        cache_files = cache_data.get("files", [])
+        cache_music = cache_data.get("music", {})
+        self.files.extend(cache_files)
+        self.files = list(set(self.files))
+        cache_music.update(self.music)
+        self.music = cache_music
+
+    def _update_cache(self):
+        self.logger.info("Writing cache: %s" % self._cache_path)
+        self.files = list(set(self.files))
+        cache = {"files": self.files, "music": self.music}
+        if Path(self._cache_path).exists():
+            os.unlink(self._cache_path)
+        with open(self._cache_path, "w") as f:
+            json.dump(cache, f)
+
+    def validate_cache(self):
+        self.logger.info("Validating cache ...")
+        self._load_cache()
+        for item in self.files.copy():
+            if not Path(item).exists():
+                self.logger.info("File [%s] does not exist, removing from cache." % item)
+                self.files.remove(item)
+                if item in self.music:
+                    del self.music[item]
+        self._update_cache()
+
+    def scan_path(self, path: str):
+        self.logger.info("Scanning path: [%s]" % path)
+        self._scanned_paths.append(path)
+        self.files.extend(self._find_files(path))
+        self.find_music()
+        self._update_cache()
+        self.logger.info("Found %d tracks out of %d total scanned files" % (len(self.music.keys()), len(self.files)))
 
     def store_file(self, file_path: str, file_data: dict, move: bool = False, dry_run: bool = False):
         if dry_run:
@@ -70,3 +113,12 @@ class MuzakStorageDriver:
                     return
             else:
                 break
+
+
+class MuzakQL:
+    def __init__(self, storage_driver: MuzakStorageDriver, config: JSONConfigurationFile, debug: bool = False):
+        self._storage_driver = storage_driver
+        self.config = config
+        self.debug = debug
+
+    

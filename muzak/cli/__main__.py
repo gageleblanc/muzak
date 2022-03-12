@@ -99,6 +99,14 @@ class MuzakCLI:
         self.logger.info("Cleaning up target directory: %s" % path)
         self._cleanup_dir(path)
 
+
+    def query(self, query: str, _and: bool = False):
+        """
+        Search for tracks based on query and return list
+        :param query: Query to run against Muzak storage
+        
+        """
+
     def organize_cache(self, destination: str, move: bool = False, cleanup_empty: bool = False, dry_run: bool = False):
         """
         Use cache to organize music in the given destination directory.
