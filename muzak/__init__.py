@@ -65,7 +65,7 @@ config_schema = {
 class Muzak:
     def __init__(self, scan_cache: str = None, debug: bool = False, cached: bool = False, driver: str = None) -> None:
         if scan_cache is None:
-            scan_cache = ".muzakscan"
+            scan_cache = str(Path.home().joinpath(".config").joinpath("muzak").joinpath(".muzakscan"))
         self._cache_path = scan_cache
         self._scanned_paths = []
         self.debug = debug
@@ -173,6 +173,47 @@ class Muzak:
             else:
                 self.logger.info("Item %s is not file or dir" % item)
         return files
+
+    def _parse_query_string(self, query_str: str, _and: bool = False):
+        """
+        Parse query string 
+        """
+        query_parts = query_str.split(";")
+        query_definition = {}
+        for part in query_parts:
+            if "=" not in part:
+                raise AttributeError("Query String: [%s] is invalid near [%s]" % (query_str, part))
+            key, value = part.split("=", 1)
+            if _and:
+                query_definition[key] = value
+            else:
+                if key not in query_definition:
+                    query_definition[key] = [value]    
+                else:
+                    query_definition[key].append(value)
+        return query_definition
+
+    def query(self, query_str: str, _and: bool = False, limit: int = None):
+        """
+        Query Muzak cache and return matching tracks
+        :param query_str: String to use for track query. Format should be <tag>=<expected_value>[;<tag>=<expected_value> ...]
+        :param limit: Limit result set
+        """
+        query_definition = self._parse_query_string(query_str, _and=_and)
+        self.logger.debug("Query: %s" % query_definition)
+        results = []
+        for path, tag in self.music.items():
+            if _and:
+                if query_definition.items() <= tag.items():
+                    results.append({"file_path": path, "tag": tag})
+            else:
+                for item, value in query_definition.items():
+                    if item in tag:
+                        if tag[item] in value:
+                            result = {"file_path": path, "tag": tag}
+                            if result not in results:
+                                results.append(result)
+        return results
     
     def validate_cache(self):
         self.logger.info("Validating cache ...")
