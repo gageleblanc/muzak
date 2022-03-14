@@ -18,7 +18,8 @@ __version__ = "0.5.5"
 
 
 default_config = {
-    "output_format": "<artist>/<album>/<title>", 
+    "output_format": "<artist>/<album>/<title>",
+    "storage_directory": "",
     "default_tags": {
         "album": "Unknown",
         "albumartist": "Various Artists",
@@ -40,7 +41,8 @@ default_config = {
 }
 
 config_schema = {
-    "output_format": str, 
+    "output_format": str,
+    "storage_directory": str,
     "default_tags": {
         "album": str,
         "albumartist": str,
@@ -74,7 +76,17 @@ class Muzak:
         driver = self.config["storage_driver"]
         if driver is None:
             driver = "muzak.drivers:MuzakStorageDriver"
-        self._storage_driver = self._load_storage_driver(driver)
+        storage_dir = self.config["storage_directory"]
+        if len(storage_dir) == 0:
+            storage_dir = Path.home().joinpath(".muzak").joinpath("storage")
+            if not storage_dir.exists():
+                storage_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            storage_dir = Path(storage_dir)
+            if not storage_dir.exists():
+                storage_dir.mkdir(parents=True, exist_ok=True)
+        self.storage_dir = str(storage_dir)
+        self.storage_driver = self._load_storage_driver(driver)
         self.files = []
         self.music = {}
         self._failed_scans = []
@@ -212,27 +224,15 @@ class Muzak:
         self._update_cache()
         self.logger.info("Found %d tracks out of %d total scanned files" % (len(self.music.keys()), len(self.files)))
 
-    def query(self, query_str: str, _and: bool = False, limit: int = None):
+    def query(self, query_str: str, limit: int = 0):
         """
         Query Muzak cache and return matching tracks
         :param query_str: String to use for track query. Format should be <tag>=<expected_value>[;<tag>=<expected_value> ...]
         :param limit: Limit result set
         """
-        query_definition = self._parse_query_string(query_str, _and=_and)
-        self.logger.debug("Query: %s" % query_definition)
-        results = []
-        for path, tag in self.music.items():
-            if _and:
-                if query_definition.items() <= tag.items():
-                    results.append({"file_path": path, "tag": tag})
-            else:
-                for item, value in query_definition.items():
-                    if item in tag:
-                        if tag[item] in value:
-                            result = {"file_path": path, "tag": tag}
-                            if result not in results:
-                                results.append(result)
-        return results
+        storage_driver: MuzakStorageDriver = self.storage_driver(self.storage_dir, self.config, debug=self.debug)
+        result = storage_driver.mql.execute(query_str, limit)
+        return result
 
     def find_music(self):
         for item in self.files:
@@ -256,7 +256,7 @@ class Muzak:
         """
         before_tracks = (len(self.music.keys()), len(self.files))
         self.logger.info("Initializing storage driver ...")
-        storage_driver = self._storage_driver(destination, self.config, debug=self.debug)
+        storage_driver = self.storage_driver(destination, self.config, debug=self.debug)
         self.logger.info("Found %d tracks out of %d total scanned files" % before_tracks)
         # Create destination if not exists.
         destination = Path(destination)

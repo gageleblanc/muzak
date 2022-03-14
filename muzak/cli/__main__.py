@@ -41,6 +41,32 @@ class MuzakCLI:
             self.logger.info("Removing empty directory: [%s]" % path)
             os.rmdir(path)
 
+    class Operator:
+        """
+        Manage Muzak administration
+        """
+        def __init__(self, config_path: str = None, debug: bool = False):
+            """
+            :param config_path: Configuration file to use. Default is ~/.config/muzak/config.json
+            """
+            self.debug = debug
+            self.logger = Logging("Muzak", "Operator", debug=debug).get_logger()
+            if config_path is None:
+                config_path = str(Path.home().joinpath(".config").joinpath("muzak").joinpath("config.json"))
+            self.config = JSONConfigurationFile(config_path, muzak.config_schema, auto_create=muzak.default_config)
+
+        def rescan_storage(self):
+            """
+            Rescan configured storage directory for newly added music
+            """
+            muzak = Muzak(debug=self.debug)
+            storage_driver = muzak.storage_driver(muzak.storage_dir, muzak.config, debug=self.debug)
+            muzak.music = storage_driver.music
+            muzak.scan_path(storage_driver.storage_path)
+            storage_driver.music = muzak.music
+            storage_driver.update_cache()
+            # storage_driver.rescan_storage()
+
     class Config:
         """
         Manage muzak configuration
@@ -99,13 +125,22 @@ class MuzakCLI:
         self.logger.info("Cleaning up target directory: %s" % path)
         self._cleanup_dir(path)
 
-
-    def query(self, query: str, _and: bool = False):
+    def query(self, query: str, limit: int = 0):
         """
         Search for tracks based on query and return list
         :param query: Query to run against Muzak storage
-        
+        :param limit: Limit results returned
         """
+        start_time = datetime.now()
+        self.muzak = Muzak(debug=self.debug)
+        storage_driver = self.muzak.storage_driver(self.muzak.storage_dir, self.muzak.config, debug=self.debug)
+        result = storage_driver.mql.execute(query, limit)
+        end_time = (datetime.now() - start_time)
+        for record in result.result_set:
+            print(record)
+        print("%d records returned" % len(result.result_set))
+        print("%d records changed" % result.changed_records)
+        print("Query executed in %s seconds" % str(end_time.total_seconds() / 60))
 
     def organize_cache(self, destination: str, move: bool = False, cleanup_empty: bool = False, dry_run: bool = False):
         """
