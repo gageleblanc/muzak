@@ -5,6 +5,7 @@ import shutil
 import json
 import re
 import os
+import taglib
 from muzak.drivers.errors import MQLError, MQLSyntaxError
 
 
@@ -98,8 +99,9 @@ class MuzakStorageDriver:
                     return
             else:
                 break
-        if update_cache and not dry_run:
+        if not dry_run:
             self.music[str(destination_path)] = file_data
+        if update_cache:
             self.update_cache()
 
     def remove_file(self, file_path: str, cached: bool = False, dry_run: bool = False, update_cache: bool = True):
@@ -123,6 +125,25 @@ class MuzakStorageDriver:
             self.logger.warn("File [%s] is not managed by Muzak, leaving it alone ...")
             return
 
+    def update_file(self, file_path: str, new_data: dict, update_cache: bool = True):
+        if file_path in self.music:
+            self.music[file_path].update(new_data)
+            f = taglib.File(file_path)
+            if f is not None:
+                for key, value in new_data.items():
+                    if not isinstance(value, list):
+                        f.tags[key.upper()] = [value]
+                    else:
+                        f.tags[key.upper()] = value
+                f.save()
+            if update_cache:
+                self.update_cache()
+    
+    def update_files(self, files: list, new_data: dict):
+        for f in files:
+            self.update_file(f, new_data, update_cache=False)
+        self.update_cache()
+
     def remove_files(self, files: list, cached: bool = False, dry_run: bool = False):
         for f in files:
             self.remove_file(f, cached, dry_run, update_cache=False)
@@ -139,8 +160,9 @@ class MuzakQuery:
         self.raw = query_str
         parsed = self._parse_query_string(query_str)
         self.command = parsed[0]
-        self.subject = parsed[1]
-        self.any = parsed[2]
+        self.target = parsed[1]
+        self.subject = parsed[2]
+        self.any = parsed[3]
 
     def __str__(self):
         return self.raw
@@ -149,13 +171,29 @@ class MuzakQuery:
         """
         Parse query string 
         """
+        query_command, query_str = query_str.split(" ", 1)
+        query_subject = None
+        if "where" in query_str.lower():
+            query_subject, query_str = re.split("where", query_str, flags=re.IGNORECASE)
+        if query_subject:
+            query_subject = [x.strip() for x in query_subject.strip().split(",")]
+            if "=" in query_subject[0]:
+                subject_dict = {}
+                for subject in query_subject:
+                    if "=" not in subject:
+                        raise MQLSyntaxError("Invalid query subject near: %s" % (",".join(query_subject)))
+                    subject_parts = subject.split("=", 1)
+                    subject_dict[subject_parts[0]] = subject_parts[1]
+                query_subject = subject_dict
+        if query_subject is "":
+            query_subject = None
+        query_str = query_str.strip()
         _any = True
         if (query_str.startswith("[") and not query_str.endswith("]")) or (query_str.endswith("]") and not query_str.startswith("[")):
-            raise MQLSyntaxError("Unterminated grouping brackets in query: %s" % query_str)
+            raise MQLSyntaxError("Unterminated condition brackets in query near: %s" % query_str)
         if query_str.startswith("[") and query_str.endswith("]"):
             _any = False
             query_str = query_str[1:-1]
-        query_command, query_str = query_str.split(" ", 1)
         query_parts = query_str.split(";")
         query_definition = {}
         for part in query_parts:
@@ -169,7 +207,7 @@ class MuzakQuery:
                     query_definition[key] = [value]    
                 else:
                     query_definition[key].append(value)
-        return query_command, query_definition, _any
+        return query_command, query_definition, query_subject, _any
 
 
 class MuzakQueryResult:
@@ -182,14 +220,24 @@ class MuzakQueryResult:
 
 class MuzakQL:
     def __init__(self, storage_driver: MuzakStorageDriver):
+        self.logger = Logging("Muzak", "Query").get_logger()
         self._storage_driver = storage_driver
         self._storage_cache = storage_driver.music
         self.config = storage_driver.config
         self.debug = storage_driver.debug
         self.methods = {
             "select": self._select_query,
-            "delete": self._delete_query
+            "delete": self._delete_query,
+            "update": self._update_query
         }
+
+    def _update_query(self, query: MuzakQuery, limit: int = 0):
+        results = self._select_query(query, limit)
+        files = []
+        for result in results.result_set:
+            files.append(result["file_path"])
+        self._storage_driver.update_files(files, query.subject)
+        return MuzakQueryResult(query, [], results.result_set)
 
     def _delete_query(self, query: MuzakQuery, limit: int = 0):
         results = self._select_query(query, limit)
@@ -201,22 +249,38 @@ class MuzakQL:
 
     def _select_query(self, query: MuzakQuery, limit: int = 0):
         results = []
-        it = 1
+        it = 0
         for path, tag in self._storage_cache.items():
             if not query.any:
-                if query.subject.items() <= tag.items():
-                    results.append({"file_path": path, "tag": tag})
+                if query.target.items() <= tag.items():
+                    if query.subject is not None:
+                        q_tag = {}
+                        for s in query.subject:
+                            q_tag[s] = tag.get(s, None)
+                        result = {"file_path": path, "tag": q_tag}
+                    else:
+                        result = {"file_path": path, "tag": tag}
+                    if result not in results:
+                        results.append(result)
+                    it += 1
             else:
-                for item, value in query.subject.items():
+                for item, value in query.target.items():
                     if item in tag:
                         if tag[item] in value:
-                            result = {"file_path": path, "tag": tag}
+                            if query.subject is not None:
+                                q_tag = {}
+                                for s in query.subject:
+                                    q_tag[s] = tag.get(s, None)
+                                result = {"file_path": path, "tag": q_tag}
+                            else:
+                                result = {"file_path": path, "tag": tag}
                             if result not in results:
                                 results.append(result)
+                                it += 1
             if limit > 0:
                 if it == limit:
                     break
-            ++it
+
         return MuzakQueryResult(query, results, [])
 
     def execute(self, query_str: str, limit: int = 0):

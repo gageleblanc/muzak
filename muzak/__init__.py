@@ -63,6 +63,25 @@ config_schema = {
     }
 }
 
+def load_file(path: str):
+    logger = Logging("Muzak", "FileLoader").get_logger()
+    try:
+        music_file = taglib.File(path)
+        tag_dict = {}
+        for tag, value in music_file.tags.items():
+            if isinstance(value, list):
+                if len(value) > 0:
+                    value = value[0]
+            else:
+                value = None
+            tag_lower = tag.lower()
+            tag_dict[tag_lower] = value
+        return tag_dict
+    except OSError:
+        logger.warn("Skipping file: [%s] (this is probably not a music file)" % path)
+    except UnicodeEncodeError:
+        logger.warn("Encountered UnicodeEncodeError on file: [%s], skipping..." % path)
+
 
 class Muzak:
     def __init__(self, scan_cache: str = None, debug: bool = False, cached: bool = False, driver: str = None) -> None:
@@ -110,25 +129,6 @@ class Muzak:
         config_path = Path.home().joinpath(".config").joinpath("muzak").joinpath("config.json")
         config_path.parent.mkdir(parents=True, exist_ok=True)
         return JSONConfigurationFile(str(config_path), schema=config_schema, auto_create=default_config)
-
-    def _load_file(self, path: str):
-        try:
-            music_file = taglib.File(path)
-            tag_dict = {}
-            for tag, value in music_file.tags.items():
-                if isinstance(value, list):
-                    if len(value) > 0:
-                        value = value[0]
-                else:
-                    value = None
-                tag_lower = tag.lower()
-                tag_dict[tag_lower] = value
-            return tag_dict
-        except OSError:
-            self.logger.warn("Skipping file: [%s] (this is probably not a music file)" % path)
-        except UnicodeEncodeError:
-            self.logger.warn("Encountered UnicodeEncodeError on file: [%s], skipping..." % path)
-            self._failed_scans.append(path)
 
     def _cleanup_dir(self, path: str):
         if not os.path.isdir(path):
@@ -216,12 +216,13 @@ class Muzak:
                     del self.music[item]
         self._update_cache()
 
-    def scan_path(self, path: str):
+    def scan_path(self, path: str, update_cache: bool = True):
         self.logger.info("Scanning path: [%s]" % path)
         self._scanned_paths.append(path)
         self.files.extend(self._find_files(path))
         self.find_music()
-        self._update_cache()
+        if update_cache:
+            self._update_cache()
         self.logger.info("Found %d tracks out of %d total scanned files" % (len(self.music.keys()), len(self.files)))
 
     def query(self, query_str: str, limit: int = 0):
@@ -239,12 +240,13 @@ class Muzak:
             if item in self.music:
                 self.logger.info("Skipping item [%s] since we have it cached." % item)
                 continue
-            tag_dict = self._load_file(item)
+            tag_dict = load_file(item)
             if tag_dict is not None:
                 self.logger.info("Found track: %s" % tag_dict)
                 self.music[item] = tag_dict
             else:
                 self.logger.warn("Skipping file [%s] due to loading error" % item)
+                self._failed_scans.append(item)
 
     def organize(self, destination: str, move: bool = True, cleanup_empty: bool = False, dry_run: bool = False):
         """
@@ -256,7 +258,7 @@ class Muzak:
         """
         before_tracks = (len(self.music.keys()), len(self.files))
         self.logger.info("Initializing storage driver ...")
-        storage_driver = self.storage_driver(destination, self.config, debug=self.debug)
+        storage_driver: MuzakStorageDriver = self.storage_driver(destination, self.config, debug=self.debug)
         self.logger.info("Found %d tracks out of %d total scanned files" % before_tracks)
         # Create destination if not exists.
         destination = Path(destination)
@@ -266,31 +268,13 @@ class Muzak:
         for item, tag in self.music.copy().items():
             # Gracefully fail this iteration if file has been moved/deleted/something else
             try:
-                storage_driver.store_file(item, tag, move=move, dry_run=dry_run)
+                storage_driver.store_file(item, tag, move=move, dry_run=dry_run, update_cache=False)
             except FileNotFoundError:
                 del self.music[item]
                 self.logger.warn("File: %s not found, skipping ... " % item)
                 continue
-            # item_path = Path(item)
-            # if not item_path.exists():
-            #     self.logger.warn("File [%s] no longer exists. Skipping..." % item)
-            #     continue
-            
-            # new_filename = destination.joinpath("%s%s" % (self._filename_from_tag(tag), item_path.suffix))
-            # parent_dir = Path(new_filename).parent
-            # if not dry_run:
-            #     if not parent_dir.exists():
-            #         parent_dir.mkdir(parents=True)
-            # if move:
-            #     self.logger.info("Moving [%s] => [%s]" % (item, new_filename))
-            #     if not dry_run:
-            #         shutil.copy(item, str(new_filename))
-            #         os.unlink(item)
-            # else:
-            #     self.logger.info("Copying [%s] => [%s]" % (item, new_filename))
-            #     if not dry_run:
-            #         shutil.copy(item, str(new_filename))
         if not dry_run:
+            storage_driver.update_cache()
             self.validate_cache()
         if cleanup_empty:
             for path in self._scanned_paths:
