@@ -149,7 +149,7 @@ class MuzakCLI:
                 print(table)
             print("%d records returned" % len(result.result_set))
             print("%d records changed" % result.changed_records)
-            print("Query executed in %s seconds" % str(round(end_time.total_seconds() / 60, 4)))
+            print("Query executed in %s seconds" % str(round(end_time.total_seconds(), 4)))
         else:
             print(json.dumps(result.result_set))
 

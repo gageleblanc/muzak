@@ -18,7 +18,7 @@ class MuzakStorageDriver:
         self.logger = Logging("Muzak", "StorageDriver", debug=debug).get_logger()
         self.music = {}
         self._load_cache()
-        self.mql = MuzakQL(self)
+        self.mql = MuzakQL(self, debug=debug)
 
     def _load_cache(self):
         cache_data = {}
@@ -127,6 +127,7 @@ class MuzakStorageDriver:
 
     def update_file(self, file_path: str, new_data: dict, update_cache: bool = True):
         if file_path in self.music:
+            self.logger.debug("Updating file: [%s]" % file_path)
             self.music[file_path].update(new_data)
             f = taglib.File(file_path)
             if f is not None:
@@ -167,6 +168,9 @@ class MuzakQuery:
     def __str__(self):
         return self.raw
 
+    def __repr__(self):
+        return "MuzakQuery: command=%s; subject=%s; target=%s; any=%s;" % (self.command, self.subject, self.target, self.any)
+
     def _parse_query_string(self, query_str: str):
         """
         Parse query string 
@@ -185,7 +189,7 @@ class MuzakQuery:
                     subject_parts = subject.split("=", 1)
                     subject_dict[subject_parts[0]] = subject_parts[1]
                 query_subject = subject_dict
-        if query_subject is "":
+        if query_subject == "":
             query_subject = None
         query_str = query_str.strip()
         _any = True
@@ -219,8 +223,9 @@ class MuzakQueryResult:
 
 
 class MuzakQL:
-    def __init__(self, storage_driver: MuzakStorageDriver):
-        self.logger = Logging("Muzak", "Query").get_logger()
+    def __init__(self, storage_driver: MuzakStorageDriver, debug: bool = False):
+        self.debug = debug
+        self.logger = Logging("Muzak", "Query", debug=debug).get_logger()
         self._storage_driver = storage_driver
         self._storage_cache = storage_driver.music
         self.config = storage_driver.config
@@ -289,7 +294,9 @@ class MuzakQL:
         :param query_str: String to use for track query. Format should be <tag>=<expected_value>[;<tag>=<expected_value> ...]
         :param limit: Limit result set
         """
+        self.logger.info("Executing query: %s" % query_str)
         query: MuzakQuery = MuzakQuery(query_str)
+        self.logger.info(repr(query))
         if query.command.lower() in self.methods:
             return self.methods[query.command.lower()](query, limit)
         else:
