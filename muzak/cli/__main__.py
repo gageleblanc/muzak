@@ -8,6 +8,9 @@ import muzak
 from muzak import Muzak
 from clilib.builders.app import EasyCLI
 from tabulate import tabulate
+import readline
+from muzak.drivers import MuzakQueryResult, MuzakStorageDriver
+from muzak.drivers.errors import MQLError
 
 
 def strfdelta(tdelta, fmt):
@@ -67,7 +70,14 @@ class MuzakCLI:
             muzak.scan_path(storage_driver.storage_path, update_cache=False)
             storage_driver.music = muzak.music
             storage_driver.update_cache()
-            # storage_driver.rescan_storage()
+            
+        def reindex_metadata(self):
+            """
+            Re-index storage metadata such as available labels and track count
+            """
+            muzak = Muzak(debug=self.debug)
+            storage_driver: MuzakStorageDriver = muzak.storage_driver(muzak.storage_dir, muzak.config, debug=self.debug)
+            storage_driver.reindex_metadata()
 
     class Config:
         """
@@ -127,31 +137,63 @@ class MuzakCLI:
         self.logger.info("Cleaning up target directory: %s" % path)
         self._cleanup_dir(path)
 
-    def query(self, query: str, limit: int = 0, output_json: bool = False, quiet: bool = False):
-        """
-        Search for tracks based on query and return list
-        :param query: Query to run against Muzak storage
-        :param limit: Limit results returned
-        """
-        limit = int(limit)
-        start_time = datetime.now()
-        self.muzak = Muzak(debug=self.debug)
-        storage_driver = self.muzak.storage_driver(self.muzak.storage_dir, self.muzak.config, debug=self.debug)
-        result = storage_driver.mql.execute(query, limit)
-        end_time = (datetime.now() - start_time)
-        if not output_json:
-            # for record in result.result_set:
-            #     print(record)
-            if len(result.result_set) > 0 and not quiet:
+    def _query_printer(self, result: MuzakQueryResult) -> MuzakQueryResult:
+        if len(result.result_set) > 0:
+            if result.query.command == "show":
+                # build stupid table structure
+                res = result.result_set[0]
+                tbl = []
+                if isinstance(res, list):
+                    for x in res:
+                        tbl.append([x])
+                else:
+                    tbl.append([res])
+                table = tabulate(tbl, [result.query.subject[0]], tablefmt="grid")
+            else:
                 headers = result.result_set[0]["tag"].keys()
                 values = [x["tag"].values() for x in result.result_set]
                 table = tabulate(values, headers, tablefmt="grid")
-                print(table)
-            print("%d records returned" % len(result.result_set))
-            print("%d records changed" % result.changed_records)
-            print("Query executed in %s seconds" % str(round(end_time.total_seconds(), 4)))
+            print(table)
+        print("%d records returned" % len(result.result_set))
+        print("%d records changed" % result.changed_records)
+
+    def _query_wrapper(self, query: str, storage_driver: MuzakStorageDriver, output_json: bool = False, quiet: bool = False):
+        try:
+            start_time = datetime.now()
+            result: MuzakQueryResult = storage_driver.mql.execute(query)
+            end_time = (datetime.now() - start_time)
+            if not output_json:
+                if not quiet:
+                    self._query_printer(result)
+                print("Query executed in %s seconds" % str(round(end_time.total_seconds(), 4)))
+            else:
+                print(json.dumps(result.result_set))
+        except MQLError as e:
+            print("%s: %s" % (e.__class__.__name__, e))
+
+    def query(self, query: str = None, output_json: bool = False, quiet: bool = False):
+        """
+        Search for tracks based on query and return list
+        :param query: Query to run against Muzak storage
+        :param output_json: Output only json
+        :param quiet: Don't print table
+        """
+        self.muzak = Muzak(debug=self.debug)
+        storage_driver = self.muzak.storage_driver(self.muzak.storage_dir, self.muzak.config, debug=self.debug)
+        if query is None:
+            print("Muzak interactive query prompt")
+            print("Muzak version %s" % muzak.__version__)
+            while True:
+                try:
+                    user_query = input("\r\nMuzakQL> ")
+                except (KeyboardInterrupt, EOFError):
+                    print("exit")
+                    break
+                if user_query.strip().lower() == "exit":
+                    break
+                self._query_wrapper(user_query, storage_driver, output_json, quiet)
         else:
-            print(json.dumps(result.result_set))
+            self._query_wrapper(query, storage_driver, output_json, quiet)
 
     def organize_cache(self, destination: str = None, move: bool = False, cleanup_empty: bool = False, dry_run: bool = False):
         """

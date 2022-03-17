@@ -4,3 +4,6 @@ class MQLError(Exception):
 
 class MQLSyntaxError(MQLError):
     pass
+
+class CommandNotFound(MQLError):
+    pass
