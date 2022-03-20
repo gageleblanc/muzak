@@ -8,10 +8,16 @@ import muzak
 from muzak import Muzak
 from clilib.builders.app import EasyCLI
 from tabulate import tabulate
-import readline
 from muzak.drivers import MuzakQueryResult, MuzakStorageDriver
 from muzak.drivers.errors import MQLError
 
+if not os.name == 'nt':
+    import readline
+# # This is specifically for windows, shouldn't matter because of conhost (maybe?)
+# try:
+#   import readline
+# except ImportError:
+#   pass
 
 def strfdelta(tdelta, fmt):
     d = {"days": tdelta.days}
@@ -60,13 +66,14 @@ class MuzakCLI:
                 config_path = str(Path.home().joinpath(".config").joinpath("muzak").joinpath("config.json"))
             self.config = JSONConfigurationFile(config_path, muzak.config_schema, auto_create=muzak.default_config)
 
-        def rescan_storage(self):
+        def rescan_storage(self, full_scan: bool = False):
             """
             Rescan configured storage directory for newly added music
             """
             muzak = Muzak(debug=self.debug)
             storage_driver = muzak.storage_driver(muzak.storage_dir, muzak.config, debug=self.debug)
-            muzak.music = storage_driver.music
+            if not full_scan:
+                muzak.music = storage_driver.music
             muzak.scan_path(storage_driver.storage_path, update_cache=False)
             storage_driver.music = muzak.music
             storage_driver.update_cache()
@@ -191,6 +198,16 @@ class MuzakCLI:
                     break
                 if user_query.strip().lower() == "exit":
                     break
+                if user_query.startswith("\\"):
+                    if user_query[1:] == "quiet":
+                        quiet = not quiet
+                        print("quiet = %s" % quiet)
+                    elif user_query[1:] == "output_json":
+                        output_json = not output_json
+                        print("output_json = %s" % output_json)
+                    else:
+                        print("Invalid command: %s" % user_query)
+                    continue
                 self._query_wrapper(user_query, storage_driver, output_json, quiet)
         else:
             self._query_wrapper(query, storage_driver, output_json, quiet)

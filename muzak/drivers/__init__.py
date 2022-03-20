@@ -212,14 +212,27 @@ class MuzakQuery:
         """
         Parse query string 
         """
+        if " " not in query_str:
+            raise MQLSyntaxError("Invalid query: %s" % query_str)
         query_command, query_str = query_str.split(" ", 1)
-        query_subject = None
+        query_subject = query_str
+        def_parts = []
         limit = 0
-        if "where" in query_str.lower():
-            query_subject, query_str = re.split("where", query_str, flags=re.IGNORECASE)
+        _any = True
+
         if "limit" in query_str.lower():
             query_str, limit = re.split("limit", query_str, re.IGNORECASE)
+            query_subject = query_str
             limit = int(limit)
+        if "where" in query_str.lower():
+            query_subject, def_str = re.split("where", query_str, flags=re.IGNORECASE)
+            def_str = def_str.strip()
+            if (def_str.startswith("[") and not def_str.endswith("]")) or (def_str.endswith("]") and not def_str.startswith("[")):
+                raise MQLSyntaxError("Unterminated condition brackets in query near: %s" % def_str)
+            if def_str.startswith("[") and def_str.endswith("]"):
+                _any = False
+                def_str = def_str[1:-1]
+            def_parts = [x.strip() for x in def_str.strip().split(";")]
         if query_subject:
             query_subject = [x.strip() for x in query_subject.strip().split(",")]
             if "=" in query_subject[0]:
@@ -233,22 +246,18 @@ class MuzakQuery:
         if query_subject == "":
             query_subject = None
         query_str = query_str.strip()
-        _any = True
-        if (query_str.startswith("[") and not query_str.endswith("]")) or (query_str.endswith("]") and not query_str.startswith("[")):
-            raise MQLSyntaxError("Unterminated condition brackets in query near: %s" % query_str)
-        if query_str.startswith("[") and query_str.endswith("]"):
-            _any = False
-            query_str = query_str[1:-1]
-        query_parts = query_str.split(";")
+        # query_parts = query_str.split(";")
         query_definition = {}
-        for part in query_parts:
+        for part in def_parts:
             if "=" not in part:
                 if query_subject is not None:
                     raise AttributeError("Query String: [%s] is invalid near [%s]" % (query_str, part))
                 else:
-                    query_subject = query_parts
+                    query_subject = def_parts
                     break
             key, value = part.split("=", 1)
+            if value == "\\None":
+                value = None
             if not _any:
                 query_definition[key] = value
             else:
@@ -323,10 +332,35 @@ class MuzakQL:
                     if result not in results:
                         results.append(result)
                     it += 1
+                else:
+                    for item, value in query.target.items():
+                        if item not in tag and value is None:
+                            if query.subject is not None:
+                                q_tag = {}
+                                for s in query.subject:
+                                    q_tag[s] = tag.get(s, None)
+                                result = {"file_path": path, "tag": q_tag}
+                            else:
+                                result = {"file_path": path, "tag": tag}
+                            if result not in results:
+                                results.append(result)
+                                it += 1
             else:
                 if len(query.target) > 0:
                     for item, value in query.target.items():
-                        if item in tag:
+                        if item == "file_path":
+                            if path in value:
+                                if query.subject is not None:
+                                    q_tag = {}
+                                    for s in query.subject:
+                                        q_tag[s] = tag.get(s, None)
+                                    result = {"file_path": path, "tag": q_tag}
+                                else:
+                                    result = {"file_path": path, "tag": tag}
+                                if result not in results:
+                                    results.append(result)
+                                    it += 1
+                        elif item in tag:
                             if tag[item] in value:
                                 if query.subject is not None:
                                     q_tag = {}
