@@ -4,7 +4,6 @@ class QueryParser:
     def __init__(self, query_str: str):
         self.query_str = " ".join(query_str.split())
         self.strlen = len(query_str)
-        self.words = []
 
     def peek(self):
         if len(self.query_str) > 0:
@@ -47,6 +46,8 @@ class QueryParser:
             if "=" not in subject:
                 raise MQLSyntaxError("Invalid Key=>Value mapping in query subject [%s]" % subject)
             key, value = subject.split("=", 1)
+            if value == "\\Null":
+                value = None
             if _any:
                 if key in definition:
                     definition[key].append(value)
