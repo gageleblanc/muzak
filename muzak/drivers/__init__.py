@@ -6,6 +6,7 @@ import json
 import re
 import os
 import taglib
+from muzak.drivers.query import QueryParser
 from muzak.drivers.errors import MQLError, MQLSyntaxError
 
 
@@ -195,12 +196,13 @@ class MuzakStorageDriver:
 class MuzakQuery:
     def __init__(self, query_str: str):
         self.raw = query_str
-        parsed = self._parse_query_string(query_str)
+        parser = QueryParser(self.raw)
+        parsed = parser.parse_query()
         self.command = parsed[0]
-        self.target = parsed[1]
-        self.subject = parsed[2]
-        self.any = parsed[3]
-        self.limit = parsed[4]
+        self.subject = parsed[1]
+        self.target = parsed[2]
+        self.limit = parsed[3]
+        self.any = parsed[4]
 
     def __str__(self):
         return self.raw
