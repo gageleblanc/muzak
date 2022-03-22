@@ -6,7 +6,7 @@ import json
 import re
 import os
 import taglib
-from muzak.drivers.query import QueryParser
+from muzak.drivers.parser import QueryParser
 from muzak.drivers.errors import MQLError, MQLSyntaxError
 
 
