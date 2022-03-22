@@ -165,20 +165,26 @@ class QueryLexer:
     def run(self):
         ast = []
         while self.peek_type() != T_EOF:
+            # Ignore whitespace
             if self.peek_type() == T_Whitespace:
                 self.next()
+            # Parse a word if we detect a regular character
             elif self.peek_type() == T_Char:
                 w = self.parse_word()
                 ast.append({"type": word_type(w), "data": w})
+            # Parse a number if we detect an int character
             elif self.peek_type() == T_Int:
                 i = self.parse_int()
                 ast.append({"type": W_Int, "data": i})
+            # Parse a list if we detect an opening token for lists
             elif self.peek_type() in (T_OpenBrac, T_OpenParen):
                 c = self.parse_list(self.peek_type())
                 ast.append({"type": C_List, "data": c})
+            # Parse a target if we detect an & token or the curly brace token
             elif self.peek_type() in (T_And, T_OpenCurl):
                 d = self.parse_target()
                 ast.append({"type": C_Target, "data": d})
+            # Raise an error for an unexpected token
             else:
                 raise MQLSyntaxError("Unexpected token: '%s' near: %s" % (self.peek(), self.query_str))
         return ast
