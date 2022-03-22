@@ -1,3 +1,8 @@
+# Token types below
+# Tokens are individual characters. These classes
+# are mostly used to associate characters with types
+# so that we can further understand the input, or raise
+# errors for unexpected syntax.
 class MQLParserToken:
     pass
 
@@ -43,6 +48,12 @@ class T_Null(MQLParserToken):
 class T_EOF(MQLParserToken):
     pass
 
+
+# Words
+# Words are groups of tokens that make up a type of word
+# Words that are defined are matched with a type below,
+# but Words that are not defined are matched with
+# W_Generic type.
 class MQLParserWord:
     pass
 
@@ -58,15 +69,43 @@ class W_Condition(MQLParserWord):
 class W_Command(MQLParserWord):
     pass
 
+
+# Collections
+# Collections are lists or key/value pairs
 class MQLCollectionType:
     pass
 
+# List is like a standard list in most languages. code ex.: (list, item, foo, bar)
 class C_List(MQLCollectionType):
     pass
 
+# Targets are a special type of key/value pairing. Each target
+# can be either eager or strict. By default targets are eager
+# this is a mechanic used when querying data. A target would
+# be defined like this:
+# 
+# Eager:
+# Query Syntax: {key1=value1,key1=value2,key2=value3}
+# Python Syntax:
+# 
+# {
+#   "key1": ["value1", "value2"],
+#   "key2": ["value3"]
+# }
+#
+# Strict:
+# Query Syntax: &{key=value,key2=value2}
+# Python Syntax:
+# {
+#   "key": "value",
+#   "key2": "value2"
+# }
+#
 class C_Target(MQLCollectionType):
     pass
 
+
+# This is a map of tokens known to the parser/lexer
 TOKENS = {
     'a': T_Char,
     'b': T_Char,
@@ -146,6 +185,7 @@ TOKENS = {
     T_EOF: T_EOF,
 }
 
+# This is a map of words known to the parser/lexer
 WORDS = {
     "where": W_Condition,
     "limit": W_Condition,
@@ -153,12 +193,14 @@ WORDS = {
     "show": W_Command
 }
 
+# This returns the type of a given word, or generic if it is not defined.
 def word_type(word):
     if word in WORDS:
         return WORDS[word]
     else:
         return W_Generic
 
+# This returns the type of a given token, but raises an error if this token is not known to the parser/lexer
 def token_type(token):
     if token in TOKENS:
         return TOKENS[token]
