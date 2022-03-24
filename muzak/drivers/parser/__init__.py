@@ -1,9 +1,11 @@
 from muzak.drivers.errors import MQLSyntaxError
-from muzak.drivers.parser.tokens import T_EOF, TOKENS, C_List, C_Target, MQLParserToken, T_And, T_Char, T_CloseCurl, T_Equal, T_Int, T_OpenCurl, T_Whitespace, T_CloseBrac, T_CloseParen, T_Comma, T_Null, T_OpenBrac, T_OpenParen, W_Command, W_Condition, W_Generic, W_Int, token_type, word_type
+from muzak.drivers.parser.tokens import T_EOF, TOKENS, C_List, C_Target, MQLParserToken, T_And, T_Char, T_CloseCurl, T_Equal, T_Int, T_OpenCurl, T_QueryTerminator, T_Whitespace, T_CloseBrac, T_CloseParen, T_Comma, T_Null, T_OpenBrac, T_OpenParen, W_Command, W_Condition, W_Generic, W_Int, token_type, word_type
 
 
 class QueryLexer:
     def __init__(self, query_str: str):
+        self._raw = query_str
+        self.pos = 0
         self.query_str = query_str
         self.strlen = len(query_str)
 
@@ -24,6 +26,7 @@ class QueryLexer:
     def next(self):
         # Remove and return the next character from the input
         n = self.query_str[0]
+        self.pos += 1
         self.query_str = self.query_str[1:]
         return n
 
@@ -170,20 +173,27 @@ class QueryLexer:
                 self.next()
             # Parse a word if we detect a regular character
             elif self.peek_type() == T_Char:
+                position = self.pos
                 w = self.parse_word()
-                ast.append({"type": word_type(w), "data": w})
+                ast.append({"type": word_type(w), "data": w, "position": position})
             # Parse a number if we detect an int character
             elif self.peek_type() == T_Int:
+                position = self.pos
                 i = self.parse_int()
-                ast.append({"type": W_Int, "data": i})
+                ast.append({"type": W_Int, "data": i, "position": position})
             # Parse a list if we detect an opening token for lists
             elif self.peek_type() in (T_OpenBrac, T_OpenParen):
+                position = self.pos
                 c = self.parse_list(self.peek_type())
-                ast.append({"type": C_List, "data": c})
+                ast.append({"type": C_List, "data": c, "position": position})
             # Parse a target if we detect an & token or the curly brace token
             elif self.peek_type() in (T_And, T_OpenCurl):
+                position = self.pos
                 d = self.parse_target()
-                ast.append({"type": C_Target, "data": d})
+                ast.append({"type": C_Target, "data": d, "position": position})
+            elif self.peek_type() == T_QueryTerminator:
+                self.next()
+                ast.append({"type": T_QueryTerminator, "data": None})
             # Raise an error for an unexpected token
             else:
                 raise MQLSyntaxError("Unexpected token: '%s' near: %s" % (self.peek(), self.query_str))
@@ -192,7 +202,7 @@ class QueryLexer:
 
 class QueryParser:
     def __init__(self, query_str: str):
-        self.query_str = query_str
+        self.query_str = "%s " % query_str
         lexer = QueryLexer(query_str)
         self.ast = lexer.run()
 
@@ -200,6 +210,13 @@ class QueryParser:
         # Peek at the next value without removing and returning it from the AST
         if len(self.query_str) > 0:
             return self.ast[0]
+        else:
+            return {"type": T_EOF}
+    
+    def peek_type(self):
+        # Peek at the next value without removing and returning it from the AST
+        if len(self.query_str) > 0:
+            return self.ast[0]["type"]
         else:
             return {"type": T_EOF}
 
@@ -214,10 +231,11 @@ class QueryParser:
     def expect(self, expect_type):
         # Expect that the next value in the AST is a certain type, or raise an error if it is not.
         i = self.next()
+        position = i.get("position", 0)
         if i["type"] == expect_type:
             return i["data"]
         else:
-            raise MQLSyntaxError("Expected type: '%s' but got '%s'" % (expect_type.__name__, i["type"].__name__))
+            raise MQLSyntaxError("Expected type: '%s' but got '%s' near: %s" % (expect_type.__name__, i["type"].__name__, self.query_str[position:]))
 
     def parse_query(self):
         # Start by expecting at least a command from the query
@@ -233,17 +251,30 @@ class QueryParser:
         eager = True
         limit = 0
         # If we have more information in our AST, continue on by expecting a condition
-        if len(self.ast) > 0:
+        if len(self.ast) > 0 and self.peek_type() != T_QueryTerminator:
             condition = self.expect(W_Condition)
             # If the condition is a "where" condition, we will expect a target 
             # which will contain the target data, and the eager value of this target
             if condition.lower() == "where":
                 target, eager = self.expect(C_Target)
                 # we will also expect another condition word after our target if the AST is not empty
-                if len(self.ast) > 0:
+                if len(self.ast) > 0 and self.peek_type() != T_QueryTerminator:
                     condition = self.expect(W_Condition)
             # If our condition is a "limit" condition, we will expect an integer word.
             if condition.lower() == "limit":
                 limit = self.expect(W_Int)
         # Return all of these values to whatever program will interpret them, in this case just another python function.
         return command, labels, target, limit, eager
+
+    def parse_all(self):
+        queries = []
+        # While there are still items in the AST, continue
+        while len(self.ast) > 0:
+            # If the next item is the query terminator we can remove it
+            if self.peek_type() == T_QueryTerminator:
+                self.next()
+            else:
+                # Parse the next query, append to final list, and continue
+                q = self.parse_query()
+                queries.append(q)
+        return queries

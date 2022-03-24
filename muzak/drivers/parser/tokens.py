@@ -45,6 +45,9 @@ class T_CloseCurl(MQLParserToken):
 class T_Null(MQLParserToken):
     pass
 
+class T_QueryTerminator(MQLParserToken):
+    pass
+
 class T_EOF(MQLParserToken):
     pass
 
@@ -181,6 +184,7 @@ TOKENS = {
     "}": T_CloseCurl,
     "=": T_Equal,
     "&": T_And,
+    ';': T_QueryTerminator,
     None: T_Null,
     T_EOF: T_EOF,
 }
