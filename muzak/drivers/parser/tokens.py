@@ -24,6 +24,9 @@ class T_Equal(MQLParserToken):
 class T_And(MQLParserToken):
     pass
 
+class T_Wildcard(MQLParserToken):
+    pass
+
 class T_OpenParen(MQLParserToken):
     pass
 
@@ -177,6 +180,7 @@ TOKENS = {
     '8': T_Int,
     '9': T_Int,
     '0': T_Int,
+    '*': T_Wildcard,
     ' ': T_Whitespace,
     ',': T_Comma,
     "(": T_OpenParen,
@@ -197,13 +201,14 @@ WORDS = {
     "where": W_Condition,
     "limit": W_Condition,
     "select": W_Command,
+    "update": W_Command,
     "show": W_Command
 }
 
 # This returns the type of a given word, or generic if it is not defined.
 def word_type(word):
-    if word in WORDS:
-        return WORDS[word]
+    if word.lower() in WORDS:
+        return WORDS[word.lower()]
     else:
         return W_Generic
 

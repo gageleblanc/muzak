@@ -1,5 +1,5 @@
 from muzak.drivers.errors import MQLSyntaxError
-from muzak.drivers.parser.tokens import T_EOF, TOKENS, C_List, C_Target, MQLParserToken, T_And, T_Char, T_CloseCurl, T_Equal, T_Int, T_OpenCurl, T_QueryTerminator, T_Whitespace, T_CloseBrac, T_CloseParen, T_Comma, T_Null, T_OpenBrac, T_OpenParen, W_Command, W_Condition, W_Generic, W_Int, token_type, word_type
+from muzak.drivers.parser.tokens import T_EOF, TOKENS, C_List, C_Target, MQLParserToken, T_And, T_Char, T_CloseCurl, T_Equal, T_Int, T_OpenCurl, T_QueryTerminator, T_Whitespace, T_CloseBrac, T_CloseParen, T_Comma, T_Null, T_OpenBrac, T_OpenParen, T_Wildcard, W_Command, W_Condition, W_Generic, W_Int, token_type, word_type
 
 
 class QueryLexer:
@@ -193,8 +193,14 @@ class QueryLexer:
                 ast.append({"type": C_Target, "data": d, "position": position})
             # If we see a query terminator, remove it from the input and add to AST, indicating to the parser that this query is over. 
             elif self.peek_type() == T_QueryTerminator:
+                position = self.pos
                 self.next()
-                ast.append({"type": T_QueryTerminator, "data": None})
+                ast.append({"type": T_QueryTerminator, "data": None, "position": position})
+            # If we see a wildcard, remove it from the input and add it to the AST
+            elif self.peek_type() == T_Wildcard:
+                position = self.pos
+                self.next()
+                ast.append({"type": T_Wildcard, "data": "*", "position": position})
             # Raise an error for an unexpected token
             else:
                 raise MQLSyntaxError("Unexpected token: '%s' near: %s" % (self.peek(), self.query_str))
@@ -222,6 +228,13 @@ class QueryParser:
         else:
             return {"type": T_EOF}
 
+    def peek_pos(self):
+        # peek at the next item's position in the input.
+        if len(self.query_str) > 0:
+            return self.ast[0]["position"]
+        else:
+            return 0
+
     def next(self):
         # Remove and return the next value from the AST, or return an EOF token if the AST is empty
         if len(self.ast) > 0:
@@ -242,14 +255,25 @@ class QueryParser:
     def parse_query(self):
         # Start by expecting at least a command from the query
         command = self.expect(W_Command)
+        command = command.lower()
         # If the command is "show" we can expect one more word and return
         if command == "show":
             labels = [self.expect(W_Generic)]
             return command, labels, {}, 0, False
-        # If we arrive here, we should expect a list of labels to query
-        labels = self.expect(C_List)
-        if len(labels) == 0:
-            labels = None
+        if command == "select":
+            # If we arrive here, we should expect a list of labels to query, or a wildcard to return all labels
+            if self.peek_type() == C_List:
+                labels = self.expect(C_List)
+                if len(labels) == 0:
+                    labels = None
+            elif self.peek_type() == T_Wildcard:
+                self.expect(T_Wildcard)
+                labels = None
+            else:
+                raise MQLSyntaxError("Expected C_List or T_Wildcard but got '%s' near %s" % (self.peek_type().__name__, self.query_str[self.peek_pos():]))
+        if command == "update":
+            # If we arrive here, we should expect a target, since we are updating and require a key->value pairing.
+            labels = self.expect(C_Target)
         # Set default values in case there are no restriction conditions on this query
         target = {}
         eager = True

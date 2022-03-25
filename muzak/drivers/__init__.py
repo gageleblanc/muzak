@@ -194,10 +194,13 @@ class MuzakStorageDriver:
 
 
 class MuzakQuery:
-    def __init__(self, query_str: str):
-        self.raw = query_str
-        parser = QueryParser(self.raw)
-        parsed = parser.parse_query()
+    def __init__(self, query_str):
+        if isinstance(query_str, str):
+            self.raw = query_str
+            parser = QueryParser(self.raw)
+            parsed = parser.parse_query()
+        elif isinstance(query_str, tuple):
+            parsed = query_str
         self.command = parsed[0]
         self.subject = parsed[1]
         self.target = parsed[2]
@@ -307,11 +310,16 @@ class MuzakQL:
             raise MQLSyntaxError("Invalid show query: %s" % query)
 
     def _update_query(self, query: MuzakQuery, limit: int = 0):
-        results = self._select_query(query, limit)
+        select = MuzakQuery((query.command, None, query.target, query.limit, query.any))
+        results = self._select_query(select, limit)
         files = []
         for result in results.result_set:
             files.append(result["file_path"])
-        self._storage_driver.update_files(files, query.subject)
+        new_values = query.subject[0]
+        for key, value in query.subject[0]:
+            if isinstance(new_values[key], list):
+                new_values[key] = new_values[key][0]
+        self._storage_driver.update_files(files, query.subject[0])
         return MuzakQueryResult(query, [], results.result_set)
 
     def _delete_query(self, query: MuzakQuery, limit: int = 0):
@@ -396,12 +404,16 @@ class MuzakQL:
                                     it += 1
                 else:
                     q_tag = {}
-                    for s in query.subject:
-                        if s == "file_path":
-                            q_tag[s] = path
-                        else:
-                            q_tag[s] = tag.get(s, None)
-                    result = {"file_path": path, "tag": q_tag}
+                    if query.subject is not None:
+                        for s in query.subject:
+                            if s == "file_path":
+                                q_tag[s] = path
+                            else:
+                                q_tag[s] = tag.get(s, None)
+                        result = {"file_path": path, "tag": q_tag}
+                    else:
+                        tag["file_path"] = path
+                        result = {"file_path": path, "tag": tag}
                     results.append(result)
                     it += 1
             if limit > 0:
