@@ -295,7 +295,11 @@ class MuzakQL:
 
     def _show_properties(self, query: MuzakQuery, limit: int = 0):
         if len(query.subject) > 0:
-            value = self._storage_driver.metadata[query.subject[0]]
+            # Allow user to show available properties that they can get or get the value of one of those properties
+            if query.subject[0] == "properties":
+                value = list(self._storage_driver.metadata["."].keys())
+            else:
+                value = self._storage_driver.metadata[query.subject[0]]
             if value is None:
                 raise MQLError("Unknown property: %s" % query.subject[0])
             return MuzakQueryResult(query, [value], [])
@@ -327,9 +331,13 @@ class MuzakQL:
                     if query.subject is not None:
                         q_tag = {}
                         for s in query.subject:
-                            q_tag[s] = tag.get(s, None)
+                            if s == "file_path":
+                                q_tag[s] = path
+                            else:
+                                q_tag[s] = tag.get(s, None)
                         result = {"file_path": path, "tag": q_tag}
                     else:
+                        tag["file_path"] = path
                         result = {"file_path": path, "tag": tag}
                     if result not in results:
                         results.append(result)
@@ -340,9 +348,13 @@ class MuzakQL:
                             if query.subject is not None:
                                 q_tag = {}
                                 for s in query.subject:
-                                    q_tag[s] = tag.get(s, None)
+                                    if s == "file_path":
+                                        q_tag[s] = path
+                                    else:
+                                        q_tag[s] = tag.get(s, None)
                                 result = {"file_path": path, "tag": q_tag}
                             else:
+                                tag["file_path"] = path
                                 result = {"file_path": path, "tag": tag}
                             if result not in results:
                                 results.append(result)
@@ -355,9 +367,13 @@ class MuzakQL:
                                 if query.subject is not None:
                                     q_tag = {}
                                     for s in query.subject:
-                                        q_tag[s] = tag.get(s, None)
+                                        if s == "file_path":
+                                            q_tag[s] = path
+                                        else:
+                                            q_tag[s] = tag.get(s, None)
                                     result = {"file_path": path, "tag": q_tag}
                                 else:
+                                    tag["file_path"] = path
                                     result = {"file_path": path, "tag": tag}
                                 if result not in results:
                                     results.append(result)
@@ -367,9 +383,13 @@ class MuzakQL:
                                 if query.subject is not None:
                                     q_tag = {}
                                     for s in query.subject:
-                                        q_tag[s] = tag.get(s, None)
+                                        if s == "file_path":
+                                            q_tag[s] = path
+                                        else:
+                                            q_tag[s] = tag.get(s, None)
                                     result = {"file_path": path, "tag": q_tag}
                                 else:
+                                    tag["file_path"] = path
                                     result = {"file_path": path, "tag": tag}
                                 if result not in results:
                                     results.append(result)
@@ -377,7 +397,10 @@ class MuzakQL:
                 else:
                     q_tag = {}
                     for s in query.subject:
-                        q_tag[s] = tag.get(s, None)
+                        if s == "file_path":
+                            q_tag[s] = path
+                        else:
+                            q_tag[s] = tag.get(s, None)
                     result = {"file_path": path, "tag": q_tag}
                     results.append(result)
                     it += 1

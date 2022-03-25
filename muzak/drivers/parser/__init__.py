@@ -191,6 +191,7 @@ class QueryLexer:
                 position = self.pos
                 d = self.parse_target()
                 ast.append({"type": C_Target, "data": d, "position": position})
+            # If we see a query terminator, remove it from the input and add to AST, indicating to the parser that this query is over. 
             elif self.peek_type() == T_QueryTerminator:
                 self.next()
                 ast.append({"type": T_QueryTerminator, "data": None})
@@ -200,6 +201,7 @@ class QueryLexer:
         return ast
 
 
+# This parser essentially pulls the data from the AST that we need to interperet in order to run the query. see muzak.drivers.MuzakQL 
 class QueryParser:
     def __init__(self, query_str: str):
         self.query_str = "%s " % query_str
@@ -246,6 +248,8 @@ class QueryParser:
             return command, labels, {}, 0, False
         # If we arrive here, we should expect a list of labels to query
         labels = self.expect(C_List)
+        if len(labels) == 0:
+            labels = None
         # Set default values in case there are no restriction conditions on this query
         target = {}
         eager = True
