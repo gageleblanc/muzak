@@ -17,3 +17,40 @@ MuzakQL expects you to provide SQL-like query strings with a few notable differe
 1. There is only one 'table', so there is no FROM context. All `select` commands are run on the entire music library
 2. Lists of labels to pull should be in parenthesis or brackets ([] or ())
 3. The WHERE target needs to be wrapped in curly braces, and preceeded by an ampersand (&) if you want the condition to operate like a SQL AND. Without the ampersand token, the query will operate like a SQL OR.
+
+## Query Output
+
+```
+Muzak interactive query prompt
+Muzak version 0.8.3
+
+MuzakQL> select [artist, album, title] where {genre=Punk} limit 10
++-----------------------+--------------------------------+------------------+
+| artist                | album                          | title            |
++=======================+================================+==================+
+| Against All Authority | 24 Hour Roadside Resistance    | I'm Weak Inside  |
++-----------------------+--------------------------------+------------------+
+| Against All Authority | Nothing New For Trash Like You | Haymarket Square |
++-----------------------+--------------------------------+------------------+
+| Bad Religion          | Back To The Known              | Along The Way    |
++-----------------------+--------------------------------+------------------+
+| Bad Religion          | Back To The Known              | Bad Religion     |
++-----------------------+--------------------------------+------------------+
+| Bad Religion          | Back To The Known              | Frogger          |
++-----------------------+--------------------------------+------------------+
+| Bad Religion          | Back To The Known              | New Leaf         |
++-----------------------+--------------------------------+------------------+
+| Bad Religion          | Back To The Known              | Yesterday        |
++-----------------------+--------------------------------+------------------+
+| Bad Religion          | Bad Religion                   | Bad Religion     |
++-----------------------+--------------------------------+------------------+
+| Bad Religion          | Bad Religion                   | Drastic Actions  |
++-----------------------+--------------------------------+------------------+
+| Bad Religion          | Bad Religion                   | Politics         |
++-----------------------+--------------------------------+------------------+
+10 records returned
+0 records changed
+Query executed in 0.001 seconds
+
+MuzakQL>
+```
