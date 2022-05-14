@@ -11,7 +11,7 @@ import importlib
 from clilib.util.logging import Logging
 from clilib.config.config_loader import JSONConfigurationFile
 
-from muzak.drivers import MuzakStorageDriver
+from muzak.drivers import MuzakQueryResult, MuzakStorageDriver
 
 
 __version__ = "0.8.3"
@@ -225,14 +225,27 @@ class Muzak:
             self._update_cache()
         self.logger.info("Found %d tracks out of %d total scanned files" % (len(self.music.keys()), len(self.files)))
 
-    def query(self, query_str: str, limit: int = 0):
+    def query(self, query_str: str) -> MuzakQueryResult:
         """
         Query Muzak cache and return matching tracks
         :param query_str: String to use for track query. Format should be <tag>=<expected_value>[;<tag>=<expected_value> ...]
         :param limit: Limit result set
         """
         storage_driver: MuzakStorageDriver = self.storage_driver(self.storage_dir, self.config, debug=self.debug)
-        result = storage_driver.mql.execute(query_str, limit)
+        result: MuzakQueryResult = storage_driver.mql.execute(query_str)
+        return result
+
+    def search(self, search_str: str, limit: int = 0) -> MuzakQueryResult:
+        """
+        Search Muzak cache and return matching tracks
+        :param search_str: String to use for track search.
+        :param limit: Limit result set
+        """
+        storage_driver: MuzakStorageDriver = self.storage_driver(self.storage_dir, self.config, debug=self.debug)
+        query = "select [artist, album, title] where {~artist=%s,~album=%s,~title=%s}" % (search_str, search_str, search_str)
+        if limit > 0:
+            query += " limit %d" % limit
+        result: MuzakQueryResult = storage_driver.mql.execute(query)
         return result
 
     def find_music(self):

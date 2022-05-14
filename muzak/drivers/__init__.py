@@ -386,8 +386,27 @@ class MuzakQL:
                                 if result not in results:
                                     results.append(result)
                                     it += 1
+                        elif item.startswith("~"):
+                            # return values which contain the value
+                            if item[1:] in tag:
+                                for val in value:
+                                    if val in tag[item[1:]] or val.lower() in tag[item[1:]].lower():
+                                        if query.subject is not None:
+                                            q_tag = {}
+                                            for s in query.subject:
+                                                if s == "file_path":
+                                                    q_tag[s] = path
+                                                else:
+                                                    q_tag[s] = tag.get(s, None)
+                                            result = {"file_path": path, "tag": q_tag}
+                                        else:
+                                            tag["file_path"] = path
+                                            result = {"file_path": path, "tag": tag}
+                                        if result not in results:
+                                            results.append(result)
+                                            it += 1
                         elif item in tag:
-                            if tag[item] in value:
+                            if tag[item] in value or tag[item].lower() in value:
                                 if query.subject is not None:
                                     q_tag = {}
                                     for s in query.subject:

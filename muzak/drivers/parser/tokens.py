@@ -192,6 +192,7 @@ TOKENS = {
     "=": T_Equal,
     "&": T_And,
     ';': T_QueryTerminator,
+    '~': T_Char,
     None: T_Null,
     T_EOF: T_EOF,
 }
