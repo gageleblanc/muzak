@@ -1,15 +1,17 @@
 from pathlib import Path
 import os
 import json
+from time import strftime
 from clilib.config.config_loader import JSONConfigurationFile
 from clilib.util.logging import Logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import muzak
 from muzak import Muzak
 from clilib.builders.app import EasyCLI
 from tabulate import tabulate
 from muzak.drivers import MuzakQueryResult, MuzakStorageDriver
 from muzak.drivers.errors import MQLError
+from muzak.http.util import LinkCode
 
 if not os.name == 'nt':
     import readline
@@ -72,6 +74,7 @@ class MuzakCLI:
             """
             muzak = Muzak(debug=self.debug)
             storage_driver = muzak.storage_driver(muzak.storage_dir, muzak.config, debug=self.debug)
+            muzak.music = {}
             if not full_scan:
                 muzak.music = storage_driver.music
             muzak.scan_path(storage_driver.storage_path, update_cache=False)
@@ -85,6 +88,74 @@ class MuzakCLI:
             muzak = Muzak(debug=self.debug)
             storage_driver: MuzakStorageDriver = muzak.storage_driver(muzak.storage_dir, muzak.config, debug=self.debug)
             storage_driver.reindex_metadata()
+
+        def create_link(self, expire: str = '30d'):
+            """
+            Create a link code to be used with the Muzak API
+            :param expire: Expiration time of the link. Default is 30 days.
+            """
+            muzak = Muzak(debug=self.debug)
+            api_home = Path(muzak.storage_dir).joinpath(".muzak_api")
+            link_config = api_home.joinpath("links.json")
+            lc = LinkCode(link_config)
+            ts = datetime.now()
+            if expire.endswith("d"):
+                expire = int(expire[:-1])
+                ts = ts + timedelta(days=expire)
+            elif expire.endswith("h"):
+                expire = int(expire[:-1])
+                ts = ts + timedelta(hours=expire)
+            elif expire.endswith("mo"):
+                expire = int(expire[:-2])
+                ts = ts + timedelta(days=expire * 30)
+
+            link_code = lc.create_link(int(ts.timestamp()))
+            self.logger.info("Link code: %s" % link_code)
+
+        def list_links(self):
+            """
+            List all link codes
+            """
+            muzak = Muzak(debug=self.debug)
+            api_home = Path(muzak.storage_dir).joinpath(".muzak_api")
+            link_config = api_home.joinpath("links.json")
+            lc = LinkCode(link_config)
+            links = lc.config["links"]
+            if len(links) == 0:
+                self.logger.info("No links found")
+                return
+            table = []
+            for link, definition in links.items():
+                # expires = datetime.utcfromtimestamp(definition["expires"]).strftime('%Y-%m-%d %H:%M:%S')
+                expires = strfdelta((datetime.utcfromtimestamp(definition["expires"]) - datetime.now()), "{days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
+                table.append([link, expires])
+            print(tabulate(table, headers=["Code", "Expiration"], tablefmt="grid"))
+
+        def delete_link(self, link_code: str):
+            """
+            Delete a link code
+            :param link_code: Link code to delete
+            """
+            muzak = Muzak(debug=self.debug)
+            api_home = Path(muzak.storage_dir).joinpath(".muzak_api")
+            link_config = api_home.joinpath("links.json")
+            lc = LinkCode(link_config)
+            lc.remove_link(link_code)
+            self.logger.info("Link code deleted: %s" % link_code)
+
+        def check_link(self, link_code: str):
+            """
+            Check if a link code is valid
+            :param link_code: Link code to check
+            """
+            muzak = Muzak(debug=self.debug)
+            api_home = Path(muzak.storage_dir).joinpath(".muzak_api")
+            link_config = api_home.joinpath("links.json")
+            lc = LinkCode(link_config)
+            if not lc.check_link(link_code):
+                self.logger.error("Invalid link code")
+                return
+            self.logger.info("Link code is valid")
 
     class Config:
         """

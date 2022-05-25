@@ -12,12 +12,14 @@ from muzak.drivers.errors import MQLError, MQLSyntaxError
 
 metadata_schema = {
     "labels": list,
-    "count": int
+    "count": int,
+    "releases": {},
 }
 
 metadata_default = {
     "labels": [],
-    "count": 0
+    "count": 0,
+    "releases": {},
 }
 
 
@@ -86,6 +88,12 @@ class MuzakStorageDriver:
         self.logger.debug("%d songs known to Muzak" % songs_len)
         self.metadata["count"] = songs_len
         for tag in self.music.values():
+            if "artist" in tag and "album" in tag:
+                if tag["artist"] not in self.metadata["releases"]:
+                    self.metadata["releases"][tag["artist"]] = []
+                else:
+                    if tag["album"] not in self.metadata["releases"][tag["artist"]]:
+                        self.metadata["releases"][tag["artist"]].append(tag["album"])
             for label in tag.keys():
                 if label not in labels:
                     self.logger.debug("Found label: [%s]" % label)
@@ -136,6 +144,12 @@ class MuzakStorageDriver:
                     self.metadata["labels"] = []
                 if label not in self.metadata["labels"]:
                     self.metadata["labels"].append(label)
+            if "artist" in file_data and "album" in file_data:
+                if file_data["artist"] not in self.metadata["releases"]:
+                    self.metadata["releases"][file_data["artist"]] = []
+                else:
+                    if file_data["album"] not in self.metadata["releases"][file_data["artist"]]:
+                        self.metadata["releases"][file_data["artist"]].append(file_data["album"])
             self.metadata["count"] += 1
             self.music[str(destination_path)] = file_data
             if update_cache:
