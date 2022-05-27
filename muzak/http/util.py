@@ -138,7 +138,7 @@ class Playlists:
                 self.playlists[playlist_id]["tracks"].remove(track)
         else:
             self.playlists[playlist_id]["tracks"].remove(track_id)
-            self.playlists.write()
+        self.playlists.write()
         return True
 
     def get_playlist(self, playlist_id):

@@ -15,6 +15,8 @@ import sys
 import base64
 import random
 import operator
+import re
+import mimetypes
 
 app = Flask(__name__)
 
@@ -38,6 +40,51 @@ if api_config["auth_enabled"]:
         link_code = request.headers["MuzakLink"]
         if not LinkManager.check_link(link_code):
             return Response("Authentication failed", 401)
+
+def send_file(path):
+    def generate():
+        with open(path, "rb") as f:
+            data = f.read(1024)
+            while data:
+                yield data
+                data = f.read(1024)
+    return Response(generate(), mimetype=mimetypes.guess_type(path)[0])
+
+def send_file_partial(path):
+    """ 
+        Simple wrapper around send_file which handles HTTP 206 Partial Content
+        (byte ranges)
+        TODO: handle all send_file args, mirror send_file's error handling
+        (if it has any)
+    """
+    range_header = request.headers.get('Range', None)
+    if not range_header: return send_file(path)
+    
+    size = os.path.getsize(path)    
+    byte1, byte2 = 0, None
+    
+    m = re.search('(\d+)-(\d*)', range_header)
+    g = m.groups()
+    
+    if g[0]: byte1 = int(g[0])
+    if g[1]: byte2 = int(g[1])
+
+    length = size - byte1
+    if byte2 is not None:
+        length = byte2 - byte1
+    
+    data = None
+    with open(path, 'rb') as f:
+        f.seek(byte1)
+        data = f.read(length)
+
+    rv = Response(data, 
+        206,
+        mimetype=mimetypes.guess_type(path)[0], 
+        direct_passthrough=True)
+    rv.headers.add('Content-Range', 'bytes {0}-{1}/{2}'.format(byte1, byte1 + length - 1, size))
+
+    return rv
 
 
 @app.route("/api/v1/update/cache/", methods=["GET"])
@@ -186,19 +233,22 @@ def popular(limit = 10):
     return {"tracks": list(most_popular.keys())}
 
 @app.route("/api/v1/stream/<track_id>/", methods=["GET"])
-def mp3(track_id):
+def stream(track_id):
     """
-    API endpoint for streaming mp3s.
+    API endpoint for streaming audio.
     """
     # filename = request.json["file"]
     logger.info("Getting file for ID: %s" % track_id)
     filename = base64.b64decode(track_id).decode()
     logger.info("Filename: %s" % filename)
-    if track_id in track_statistics:
-        track_statistics[track_id] += 1
-    else:
-        track_statistics[track_id] = 1
-
+    range_header = request.headers.get('Range', None)    
+    m = re.search('(\d+)-(\d*)', range_header)
+    g = m.groups()
+    if int(g[0]) > 0:
+        if track_id in track_statistics:
+            track_statistics[track_id] += 1
+        else:
+            track_statistics[track_id] = 1
     if track_id not in recently_played_tracks:
         recently_played_tracks.append(track_id)
         if len(recently_played_tracks) > 10:
@@ -207,13 +257,18 @@ def mp3(track_id):
         return Response(status=403)
     if not Path(filename).is_file():
         return Response(status=404)
-    def generate():
-        with open(filename, "rb") as f:
-            data = f.read(1024)
-            while data:
-                yield data
-                data = f.read(1024)
-    return Response(generate(), mimetype="audio/mp3")
+    return send_file_partial(filename)
+    # def generate():
+    #     with open(filename, "rb") as f:
+    #         data = f.read(1024)
+    #         while data:
+    #             yield data
+    #             data = f.read(1024)
+    # return Response(generate(), mimetype="audio/mp3")
+
+@app.route("/api/v1/statistics/", methods=["GET"])
+def track_stats():
+    return track_statistics
 
 ##########################
 ###  Artist Endpoints  ###
