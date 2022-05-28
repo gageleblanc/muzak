@@ -263,10 +263,13 @@ def stream(track_id):
     m = re.search('(\d+)-(\d*)', range_header)
     g = m.groups()
     if int(g[0]) == 0:
+        logger.info("Streaming from start, updating track stats")
         if track_id in track_statistics:
             track_statistics[track_id] += 1
         else:
             track_statistics[track_id] = 1
+    else:
+        logger.info("Streaming from %s" % g[0])
     if track_id not in recently_played_tracks:
         recently_played_tracks.append(track_id)
         if len(recently_played_tracks) > 10:
@@ -433,3 +436,26 @@ def remove_from_playlist():
     tracks = request.json["tracks"]
     PlaylistManager.remove_track(playlist_id, tracks)
     return {"status": "ok"}
+
+############################
+### Cover Administration ###
+############################
+
+@app.route('/api/v1/covers/track/upload/', methods=['POST'])
+def upload_file():
+    if "Muzak-Admin" not in request.headers:
+        return Response(status=401)
+    if 'file' not in request.files:
+        return Response(status=400)
+
+    upload = request.files['file']
+    track_id = request.form['track_id']
+    # If the user does not select a file, the browser submits an
+    # empty file without a filename.
+    if upload.filename == '':
+        return Response(status=400)
+    if upload:
+        cover_data = upload.read()
+        cover_data = bytes(cover_data)
+        CoverManager.set_cover_by_id(track_id, cover_data)
+        return Response(status=200)
