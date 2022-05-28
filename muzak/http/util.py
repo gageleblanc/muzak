@@ -17,6 +17,77 @@ def build_api_env():
     api_data.mkdir(parents=True, exist_ok=True)
     return api_home
 
+class CoverCache:
+    """
+    Cover cache.
+    """
+    def __init__(self, api_home):
+        self.api_home = Path(api_home)
+        self.cache_home = api_home.joinpath("cache")
+        self.track_cache = self.cache_home.joinpath("track")
+        self.artist_cache = self.cache_home.joinpath("artist")
+        self.cache_home.mkdir(parents=True, exist_ok=True)
+
+    def set_cover_by_id(self, track_id, cover_data, force: bool = False):
+        """
+        Sets the cover by ID.
+        """
+        self.track_cache.mkdir(parents=True, exist_ok=True)
+        final = self.track_cache.joinpath(track_id)
+        if final.exists():
+            if force:
+                final.write_bytes(cover_data).write_bytes(cover_data)
+
+    def set_cover_by_artist(self, artist, cover_data, force: bool = False):
+        """
+        Sets the cover by artist.
+        """
+        self.artist_cache.joinpath(artist).mkdir(parents=True, exist_ok=True)
+        final = self.artist_cache.joinpath(artist).joinpath("cover.jpg")
+        if final.exists():
+            if force:
+                final.write_bytes(cover_data)
+
+    def set_cover_by_album(self, artist, album, cover_data, force: bool = False):
+        """
+        Sets the cover by album.
+        """
+        self.artist_cache.joinpath(artist).joinpath(album).mkdir(parents=True, exist_ok=True)
+        final = self.artist_cache.joinpath(artist).joinpath(album).joinpath("cover.jpg")
+        if final.exists():
+            if force:
+                final.write_bytes(cover_data).write_bytes(cover_data)
+
+    def get_cover_by_id(self, track_id):
+        """
+        Gets the cover by ID.
+        """
+        cover_path = self.track_cache.joinpath(track_id)
+        if cover_path.exists():
+            with cover_path.open("rb") as f:
+                return f.read()
+        return None
+
+    def get_cover_by_artist(self, artist):
+        """
+        Gets the cover by artist.
+        """
+        cover_path = self.artist_cache.joinpath(artist).joinpath("cover.jpg")
+        if cover_path.exists():
+            with cover_path.open("rb") as f:
+                return f.read()
+        return None
+
+    def get_cover_by_album(self, artist, album):
+        """
+        Gets the cover by album.
+        """
+        cover_path = self.artist_cache.joinpath(artist).joinpath(album).joinpath("cover.jpg")
+        if cover_path.exists():
+            with cover_path.open("rb") as f:
+                return f.read()
+        return None
+
 class LinkCode:
     def __init__(self, config_file: str):
         config_path = Path(config_file)

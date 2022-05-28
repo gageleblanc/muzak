@@ -7,7 +7,7 @@ from muzak.drivers import MuzakQueryResult, MuzakStorageDriver
 from clilib.util.logging import Logging
 from clilib.config.config_loader import JSONConfigurationFile
 from clilib.util.dict import SearchableDict
-from muzak.http.util import Playlists, LinkCode
+from muzak.http.util import Playlists, LinkCode, CoverCache
 from PIL import Image
 import mutagen
 import os
@@ -26,6 +26,7 @@ muzak = Muzak()
 api_home = Path(muzak.storage_dir).joinpath(".muzak_api")
 api_config_path = api_home.joinpath("config.json")
 api_config = JSONConfigurationFile(str(api_config_path), {"auth_enabled": bool}, auto_create={"auth_enabled": False})
+CoverManager = CoverCache(api_home)
 LinkManager = LinkCode(str(api_home.joinpath("links.json")))
 PlaylistManager = Playlists()
 storage_driver: MuzakStorageDriver = muzak.storage_driver(muzak.storage_dir, muzak.config)
@@ -184,12 +185,29 @@ def cover(track_id):
     logger.info("Getting cover for ID: %s" % track_id)
     filename = base64.b64decode(track_id).decode()
     logger.info("Filename: %s" % filename)
+    if cover_data := CoverManager.get_cover_by_id(track_id):
+        logger.info("Found cover in cache")
+        res = Response(cover_data, mimetype="image/jpeg")
+        res.cache_control.max_age = 3000
+        return res
     if filename in storage_driver.music:
+        tag = storage_driver.music[filename]
         mf = mutagen.File(filename)
         if "APIC:cover" in mf:
             cover = mf["APIC:cover"].data
             # cover_b64 = base64.b64encode(cover).decode()
+            CoverManager.set_cover_by_id(track_id, cover)
+            CoverManager.set_cover_by_album(tag["artist"], tag["album"], cover, force=True)
+            CoverManager.set_cover_by_artist(tag["artist"], cover)
             res = Response(cover, mimetype="image/jpeg")
+            res.cache_control.max_age = 3000
+            return res
+        elif cover_data := CoverManager.get_cover_by_album(tag["artist"], tag["album"]):
+            res = Response(cover_data, mimetype="image/jpeg")
+            res.cache_control.max_age = 3000
+            return res
+        elif cover_data := CoverManager.get_cover_by_artist(tag["artist"]):
+            res = Response(cover_data, mimetype="image/jpeg")
             res.cache_control.max_age = 3000
             return res
         else:
@@ -244,7 +262,7 @@ def stream(track_id):
     range_header = request.headers.get('Range', None)    
     m = re.search('(\d+)-(\d*)', range_header)
     g = m.groups()
-    if int(g[0]) > 0:
+    if int(g[0]) == 0:
         if track_id in track_statistics:
             track_statistics[track_id] += 1
         else:
@@ -313,6 +331,10 @@ def album_coverart(artist, album):
     """
     # result: MuzakQueryResult = storage_driver.mql.execute("select [file_path] where {artist=%s,album=%s} limit 1" % (artist, album))
     # file_path = result.result_set[0]["file_path"]
+    if cover_data := CoverManager.get_cover_by_album(artist, album):
+        res = Response(cover_data, mimetype="image/jpeg")
+        res.cache_control.max_age = 3000
+        return res
     file_path = None
     for path, info in storage_driver.music.items():
         if "artist" not in info or "album" not in info:
@@ -326,6 +348,7 @@ def album_coverart(artist, album):
     if "APIC:cover" in mf:
         cover = mf["APIC:cover"].data
         # cover_b64 = base64.b64encode(cover).decode()
+        CoverManager.set_cover_by_album(artist, album, cover)
         res = Response(cover, mimetype="image/jpeg")
         res.cache_control.max_age = 3000
         return res
@@ -337,6 +360,10 @@ def artist_coverart(artist):
     """
     API Endpoint for getting cover art for an artist.
     """
+    if cover_data := CoverManager.get_cover_by_artist(artist):
+        res = Response(cover_data, mimetype="image/jpeg")
+        res.cache_control.max_age = 3000
+        return res
     file_path = None
     for path, info in storage_driver.music.items():
         if "artist" not in info:
@@ -349,6 +376,7 @@ def artist_coverart(artist):
     mf = mutagen.File(file_path)
     if "APIC:cover" in mf:
         cover = mf["APIC:cover"].data
+        CoverManager.set_cover_by_artist(artist, cover)
         # cover_b64 = base64.b64encode(cover).decode()
         res = Response(cover, mimetype="image/jpeg")
         res.cache_control.max_age = 3000
