@@ -28,6 +28,7 @@ api_config_path = api_home.joinpath("config.json")
 api_config = JSONConfigurationFile(str(api_config_path), {"auth_enabled": bool}, auto_create={"auth_enabled": False})
 CoverManager = CoverCache(api_home)
 LinkManager = LinkCode(str(api_home.joinpath("links.json")))
+AdminManager = LinkCode(str(api_home.joinpath("admin.json")))
 PlaylistManager = Playlists()
 storage_driver: MuzakStorageDriver = muzak.storage_driver(muzak.storage_dir, muzak.config)
 recently_played_tracks = []
@@ -36,11 +37,22 @@ track_statistics = {}
 if api_config["auth_enabled"]:
     @app.before_request
     def auth_required():
+        if request.method == "OPTIONS":
+            return
+        if request.endpoint in app.view_functions:
+            view_func = app.view_functions[request.endpoint]
+            if hasattr(view_func, '_exclude_from_auth'):
+                return
         if "MuzakLink" not in request.headers:
             return Response("Authentication required", 401)
         link_code = request.headers["MuzakLink"]
         if not LinkManager.check_link(link_code):
             return Response("Authentication failed", 401)
+
+# Exclude a request from authentication
+def exclude_from_auth(func):
+    func._exclude_from_auth = True
+    return func
 
 def send_file(path):
     def generate():
@@ -87,6 +99,39 @@ def send_file_partial(path):
 
     return rv
 
+
+@app.route("/api/v1/authenticate/", methods=["GET"])
+@exclude_from_auth
+def authenticate():
+    if request.method == "OPTIONS":
+        return "OK"
+    if not api_config["auth_enabled"]:
+        return Response("Authentication disabled", 200)
+    if "MuzakLink" in request.headers:
+        link_code = request.headers["MuzakLink"]
+        if LinkManager.check_link(link_code):
+            logger.info("Authentication successful for link: {}".format(link_code))
+            return Response("Authentication successful", 200)
+        else:
+            logger.info("Authentication failed for link: {}".format(link_code))
+            return Response("Authentication failed", 401)
+    else:
+        logger.info("Authentication required")
+        return Response("Authentication required", 401)
+
+@app.route("/api/v1/authenticate/admin/", methods=["GET"])
+@exclude_from_auth
+def authenticate_admin():
+    if request.method == "OPTIONS":
+        return "OK"
+    if "MuzakAdmin" in request.headers:
+        link_code = request.headers["MuzakAdmin"]
+        if AdminManager.check_link(link_code, admin=True):
+            return Response("Authentication successful", 200)
+        else:
+            return Response("Authentication failed", 401)
+    else:
+        return Response("Authentication required", 401)
 
 @app.route("/api/v1/update/cache/", methods=["GET"])
 def update_cache():
@@ -178,6 +223,7 @@ def tracks_info():
     return final
 
 @app.route("/api/v1/track/cover/<track_id>/", methods=["GET"])
+@exclude_from_auth
 def cover(track_id):
     """
     API Endpoint for getting track cover.
@@ -254,6 +300,7 @@ def popular(limit = 10):
     return {"tracks": list(most_popular.keys())}
 
 @app.route("/api/v1/stream/<track_id>/", methods=["GET"])
+@exclude_from_auth
 def stream(track_id):
     """
     API endpoint for streaming audio.
@@ -334,6 +381,7 @@ def album_tracks(artist, album):
     return {"tracks": tracks}
 
 @app.route("/api/v1/artists/<artist>/<album>/cover/", methods=["GET"])
+@exclude_from_auth
 def album_coverart(artist, album):
     """
     API Endpoint for getting cover art for an artist's album.
@@ -368,6 +416,7 @@ def album_coverart(artist, album):
         return Response(status=404)
 
 @app.route("/api/v1/artists/<artist>/cover/", methods=["GET"])
+@exclude_from_auth
 def artist_coverart(artist):
     """
     API Endpoint for getting cover art for an artist.
@@ -455,7 +504,7 @@ def remove_from_playlist():
 
 @app.route('/api/v1/covers/track/upload/', methods=['POST'])
 def upload_file():
-    if "Muzak-Admin" not in request.headers:
+    if "MuzakAdmin" not in request.headers:
         return Response(status=401)
     if 'file' not in request.files:
         return Response(status=400)

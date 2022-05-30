@@ -89,27 +89,31 @@ class MuzakCLI:
             storage_driver: MuzakStorageDriver = muzak.storage_driver(muzak.storage_dir, muzak.config, debug=self.debug)
             storage_driver.reindex_metadata()
 
-        def create_link(self, expire: str = '30d'):
+        def create_link(self, expire: str = None, description: str = None):
             """
             Create a link code to be used with the Muzak API
             :param expire: Expiration time of the link. Default is 30 days.
+            :param description: Description of the link. Default is none
             """
             muzak = Muzak(debug=self.debug)
             api_home = Path(muzak.storage_dir).joinpath(".muzak_api")
             link_config = api_home.joinpath("links.json")
             lc = LinkCode(link_config)
-            ts = datetime.now()
-            if expire.endswith("d"):
-                expire = int(expire[:-1])
-                ts = ts + timedelta(days=expire)
-            elif expire.endswith("h"):
-                expire = int(expire[:-1])
-                ts = ts + timedelta(hours=expire)
-            elif expire.endswith("mo"):
-                expire = int(expire[:-2])
-                ts = ts + timedelta(days=expire * 30)
+            if expire is not None:
+                ts = datetime.now()
+                if expire.endswith("d"):
+                    expire = int(expire[:-1])
+                    ts = ts + timedelta(days=expire)
+                elif expire.endswith("h"):
+                    expire = int(expire[:-1])
+                    ts = ts + timedelta(hours=expire)
+                elif expire.endswith("mo"):
+                    expire = int(expire[:-2])
+                    ts = ts + timedelta(days=expire * 30)
 
-            link_code = lc.create_link(int(ts.timestamp()))
+                link_code = lc.create_link(int(ts.timestamp()))
+            else:
+                link_code = lc.create_link(expire=None, description=description)
             self.logger.info("Link code: %s" % link_code)
 
         def list_links(self):
@@ -127,9 +131,15 @@ class MuzakCLI:
             table = []
             for link, definition in links.items():
                 # expires = datetime.utcfromtimestamp(definition["expires"]).strftime('%Y-%m-%d %H:%M:%S')
-                expires = strfdelta((datetime.utcfromtimestamp(definition["expires"]) - datetime.now()), "{days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
-                table.append([link, expires])
-            print(tabulate(table, headers=["Code", "Expiration"], tablefmt="grid"))
+                if definition["expires"] is None:
+                    expires = "Never"
+                else:
+                    expires = strfdelta((datetime.utcfromtimestamp(definition["expires"]) - datetime.now()), "{days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
+                if "description" not in definition:
+                    definition["description"] = ""
+                table.append([link, definition["description"], expires])
+                # table.append([link, expires])
+            print(tabulate(table, headers=["Code", "Description", "Expiration"], tablefmt="grid"))
 
         def delete_link(self, link_code: str):
             """

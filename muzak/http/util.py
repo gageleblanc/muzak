@@ -93,7 +93,7 @@ class LinkCode:
         config_path = Path(config_file)
         self.config = JSONConfigurationFile(str(config_path), schema={"links": {}}, auto_create={"links": {}})
     
-    def create_link(self, expire: int):
+    def create_link(self, expire: int = None, description: str = None):
         """
         Creates a link code.
         """
@@ -103,6 +103,7 @@ class LinkCode:
         self.config["links"][link_code] = {
             "link_code": link_code,
             "expires": expire,
+            "description": description
         }
         self.config.write()
         return link_code
@@ -124,9 +125,10 @@ class LinkCode:
         if link_code not in self.config["links"]:
             return False
         link_def = self.config["links"][link_code]
-        if link_def["expires"] < int(time.time()):
-            self.remove_link(link_code)
-            return False
+        if link_def["expires"] is not None:
+            if link_def["expires"] < int(time.time()):
+                self.remove_link(link_code)
+                return False
         return True
 
 
