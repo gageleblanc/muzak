@@ -183,7 +183,7 @@ def cover(track_id):
     API Endpoint for getting track cover.
     """
     logger.info("Getting cover for ID: %s" % track_id)
-    filename = base64.b64decode(track_id).decode()
+    filename = base64.b64decode(track_id).decode('utf-8')
     logger.info("Filename: %s" % filename)
     if cover_data := CoverManager.get_cover_by_id(track_id):
         logger.info("Found cover in cache")
@@ -192,7 +192,10 @@ def cover(track_id):
         return res
     if filename in storage_driver.music:
         tag = storage_driver.music[filename]
-        mf = mutagen.File(filename)
+        try:
+            mf = mutagen.File(filename)
+        except mutagen.MutagenError:
+            mf = {}
         if "APIC:cover" in mf:
             cover = mf["APIC:cover"].data
             # cover_b64 = base64.b64encode(cover).decode()
@@ -259,9 +262,12 @@ def stream(track_id):
     logger.info("Getting file for ID: %s" % track_id)
     filename = base64.b64decode(track_id).decode()
     logger.info("Filename: %s" % filename)
-    range_header = request.headers.get('Range', None)    
-    m = re.search('(\d+)-(\d*)', range_header)
-    g = m.groups()
+    range_header = request.headers.get('Range', None)
+    if not range_header:
+        g = [0]
+    else:
+        m = re.search('(\d+)-(\d*)', range_header)
+        g = m.groups()
     if int(g[0]) == 0:
         logger.info("Streaming from start, updating track stats")
         if track_id in track_statistics:
@@ -347,7 +353,10 @@ def album_coverart(artist, album):
             break
     if file_path is None:
         return Response(status=404)
-    mf = mutagen.File(file_path)
+    try:
+        mf = mutagen.File(file_path)
+    except mutagen.MutagenError:
+        return Response(status=404)
     if "APIC:cover" in mf:
         cover = mf["APIC:cover"].data
         # cover_b64 = base64.b64encode(cover).decode()
@@ -376,7 +385,10 @@ def artist_coverart(artist):
             break
     if file_path is None:
         return Response(status=404)
-    mf = mutagen.File(file_path)
+    try:
+        mf = mutagen.File(file_path)
+    except mutagen.MutagenError:
+        return Response(status=404)
     if "APIC:cover" in mf:
         cover = mf["APIC:cover"].data
         CoverManager.set_cover_by_artist(artist, cover)
