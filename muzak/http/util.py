@@ -36,7 +36,9 @@ class CoverCache:
         final = self.track_cache.joinpath(track_id)
         if final.exists():
             if force:
-                final.write_bytes(cover_data).write_bytes(cover_data)
+                final.write_bytes(cover_data)
+        else:
+            final.write_bytes(cover_data)
 
     def set_cover_by_artist(self, artist, cover_data, force: bool = False):
         """
@@ -47,6 +49,8 @@ class CoverCache:
         if final.exists():
             if force:
                 final.write_bytes(cover_data)
+        else:
+            final.write_bytes(cover_data)
 
     def set_cover_by_album(self, artist, album, cover_data, force: bool = False):
         """
@@ -56,7 +60,9 @@ class CoverCache:
         final = self.artist_cache.joinpath(artist).joinpath(album).joinpath("cover.jpg")
         if final.exists():
             if force:
-                final.write_bytes(cover_data).write_bytes(cover_data)
+                final.write_bytes(cover_data)
+        else:
+            final.write_bytes(cover_data)
 
     def get_cover_by_id(self, track_id):
         """
