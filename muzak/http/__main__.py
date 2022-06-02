@@ -43,9 +43,11 @@ if api_config["auth_enabled"]:
             view_func = app.view_functions[request.endpoint]
             if hasattr(view_func, '_exclude_from_auth'):
                 return
-        if "MuzakLink" not in request.headers:
+        link_code = request.headers.get("MuzakLink", None)
+        if link_code is None:
+            link_code = request.cookies.get("MuzakLink", None)
+        if link_code is None:
             return Response("Authentication required", 401)
-        link_code = request.headers["MuzakLink"]
         if not LinkManager.check_link(link_code):
             return Response("Authentication failed", 401)
 
@@ -111,7 +113,9 @@ def authenticate():
         link_code = request.headers["MuzakLink"]
         if LinkManager.check_link(link_code):
             logger.info("Authentication successful for link: {}".format(link_code))
-            return Response("Authentication successful", 200)
+            res = Response("Authentication successful", 200)
+            res.set_cookie("MuzakLink", link_code)
+            return res
         else:
             logger.info("Authentication failed for link: {}".format(link_code))
             return Response("Authentication failed", 401)
