@@ -226,6 +226,7 @@ def tracks_info():
             final[track_id] = None
     return final
 
+@app.route("/api/v1/track/cover/<track_id>", methods=["GET"])
 @app.route("/api/v1/track/cover/<track_id>/", methods=["GET"])
 @exclude_from_auth
 def cover(track_id):
