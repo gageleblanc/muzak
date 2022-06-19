@@ -161,8 +161,8 @@ def search_tracks():
     """
     query = request.json["query"]
     query = query.strip()
-    if query in RequestCacheManager.search[tracks]:
-        return {"results": RequestCacheManager.search[tracks][query]}
+    if query in RequestCacheManager.search["tracks"]:
+        return {"results": RequestCacheManager.search["tracks"][query]}
     if "limit" in request.json:
         limit = request.json["limit"]
     else:
