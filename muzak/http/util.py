@@ -17,6 +17,17 @@ def build_api_env():
     api_data.mkdir(parents=True, exist_ok=True)
     return api_home
 
+class ApiCache:
+    """
+    Cache for ceartain API Requests which take longer, like searches
+    """
+    def __init__(self):
+        self.search = {
+            "artists": {},
+            "albums": {},
+            "tracks": {},
+        }
+
 class CoverCache:
     """
     Cover cache.

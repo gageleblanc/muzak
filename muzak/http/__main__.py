@@ -7,7 +7,7 @@ from muzak.drivers import MuzakQueryResult, MuzakStorageDriver
 from clilib.util.logging import Logging
 from clilib.config.config_loader import JSONConfigurationFile
 from clilib.util.dict import SearchableDict
-from muzak.http.util import Playlists, LinkCode, CoverCache
+from muzak.http.util import Playlists, LinkCode, CoverCache, ApiCache
 from PIL import Image
 import mutagen
 import os
@@ -29,6 +29,7 @@ api_config = JSONConfigurationFile(str(api_config_path), {"auth_enabled": bool},
 CoverManager = CoverCache(api_home)
 LinkManager = LinkCode(str(api_home.joinpath("links.json")))
 AdminManager = LinkCode(str(api_home.joinpath("admin.json")))
+RequestCacheManager = ApiCache()
 PlaylistManager = Playlists()
 storage_driver: MuzakStorageDriver = muzak.storage_driver(muzak.storage_dir, muzak.config)
 recently_played_tracks = []
@@ -153,12 +154,15 @@ def query():
     result = muzak.query(query)
     return {"results": result.result_set}
 
-@app.route("/api/v1/search/", methods=["POST"])
-def search():
+@app.route("/api/v1/search/tracks/", methods=["POST"])
+def search_tracks():
     """
     API endpoint for searching the database.
     """
     query = request.json["query"]
+    query = query.strip()
+    if query in RequestCacheManager.search[tracks]:
+        return {"results": RequestCacheManager.search[tracks][query]}
     if "limit" in request.json:
         limit = request.json["limit"]
     else:
@@ -177,6 +181,25 @@ def search():
                 "album": res["tag"]["album"],
             }
             final.append(final_res)
+    RequestCacheManager.search["tracks"][query] = final
+    return {"results": final}
+
+@app.route("/api/v1/search/albums/", methods=["POST"])
+def search_albums():
+    query = request.json["query"]
+    query = query.strip()
+    if query in RequestCacheManager.search["albums"]:
+        return {"results": RequestCacheManager.search["albums"][query]}
+    final = []
+    for artist, albums in storage_driver.metadata["releases"].items():
+        for album in albums:
+            if query.lower() in album.lower():
+                a = {
+                    "artist": artist,
+                    "album": album,
+                }
+                final.append(a)
+    RequestCacheManager.search["albums"][query] = final
     return {"results": final}
 
 @app.route("/api/v1/labels", methods=["GET"])
@@ -301,8 +324,14 @@ def popular(limit = 10):
     Get a list of popular tracks
     """
     limit = int(limit)
-    most_popular = dict(sorted(track_statistics.items(), key=operator.itemgetter(1), reverse=True)[:limit])
-    return {"tracks": list(most_popular.keys())}
+    most_popular = list(dict(sorted(track_statistics.items(), key=operator.itemgetter(1), reverse=True)[:limit]).keys())
+    if len(most_popular) < limit:
+        tracks = list(storage_driver.music.keys())
+        while len(most_popular) < limit:
+            track = random.choice(tracks)
+            track_id = base64.b64encode(track.encode()).decode()
+            most_popular.append(track_id)
+    return {"tracks": most_popular}
 
 @app.route("/api/v1/stream/<track_id>/", methods=["GET"])
 @exclude_from_auth
