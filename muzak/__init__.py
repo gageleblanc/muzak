@@ -14,7 +14,7 @@ from clilib.config.config_loader import JSONConfigurationFile
 from muzak.drivers import MuzakQueryResult, MuzakStorageDriver
 
 
-__version__ = "0.8.9"
+__version__ = "0.8.10"
 
 
 default_config = {

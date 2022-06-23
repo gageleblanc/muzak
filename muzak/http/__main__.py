@@ -503,7 +503,7 @@ def create_smart_playlist():
     """
     name = request.json["name"]
     rules = request.json["rules"]
-    if not isinstance(rules, dict):
+    if not isinstance(rules, list):
         return Response(status=400)
     playlist = PlaylistManager.create_smart_playlist(name, rules, storage_driver)
     return {"playlist": playlist}

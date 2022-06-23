@@ -171,20 +171,21 @@ class Playlists:
         playlist_path = self.api_data.joinpath("playlists.json")
         self.playlists = JSONConfigurationFile(playlist_path, {}, auto_create={})
 
-    def create_smart_playlist(self, playlist_name: str, rules: dict, storage_driver: MuzakStorageDriver):
+    def create_smart_playlist(self, playlist_name: str, rules: list, storage_driver: MuzakStorageDriver):
         """
         Creates a smart playlist.
         """
         encoded_name = base64.b64encode(playlist_name.encode()).decode()
         final = []
         for path, tag in storage_driver.music.items():
-            for label, value in rules.items():
-                if label in tag:
-                    if value.lower() in tag[label].lower():
-                        _id = base64.b64encode(path.encode()).decode()
-                        if _id not in final:
-                            self.logger.info("Adding {} to smart playlist {}".format(_id, playlist_name))
-                            final.append(_id)
+            for rule in rules:
+                for label, value in rule.items():
+                    if label in tag:
+                        if value.lower() in tag[label].lower():
+                            _id = base64.b64encode(path.encode()).decode()
+                            if _id not in final:
+                                self.logger.info("Adding {} to smart playlist {}".format(_id, playlist_name))
+                                final.append(_id)
         if encoded_name not in self.playlists:
             self.playlists[encoded_name] = {
                 "tracks": final,
@@ -212,12 +213,13 @@ class Playlists:
                     if self.playlists[encoded_name]["metadata"]["smart"]:
                         final = []
                         for path, tag in storage_driver.music.items():
-                            for label, value in rules.items():
-                                if label in tag:
-                                    if value.lower() in tag[label].lower():
-                                        _id = base64.b64encode(path.encode()).decode()
-                                        if _id not in final:
-                                            final.append(_id)
+                            for rule in rules:
+                                for label, value in rule.items():
+                                    if label in tag:
+                                        if value.lower() in tag[label].lower():
+                                            _id = base64.b64encode(path.encode()).decode()
+                                            if _id not in final:
+                                                final.append(_id)
                             self.playlists[encoded_name]["tracks"] = final
                             self.playlists.write()
                             return self.playlists[encoded_name]
@@ -247,7 +249,8 @@ class Playlists:
         """
         if playlist_id not in self.playlists:
             return False
-        del self.playlists[playlist_id]
+        playlists = self.playlists["."]
+        del playlists[playlist_id]
         self.playlists.write()
         return True
 
