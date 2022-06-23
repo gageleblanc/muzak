@@ -202,7 +202,7 @@ def search_albums():
     RequestCacheManager.search["albums"][query] = final
     return {"results": final}
 
-@app.route("/api/v1/labels", methods=["GET"])
+@app.route("/api/v1/labels/", methods=["GET"])
 def labels():
     """
     API Endpoint for getting all labels.
@@ -494,6 +494,27 @@ def create_playlist():
     name = request.json["name"]
     tracks = request.json["tracks"]
     playlist = PlaylistManager.create_playlist(name, tracks)
+    return {"playlist": playlist}
+
+@app.route("/api/v1/create/smart_playlist/", methods=["POST"])
+def create_smart_playlist():
+    """
+    API endpoint for creating a smart playlist.
+    """
+    name = request.json["name"]
+    rules = request.json["rules"]
+    if not isinstance(rules, dict):
+        return Response(status=400)
+    playlist = PlaylistManager.create_smart_playlist(name, rules, storage_driver)
+    return {"playlist": playlist}
+
+@app.route("/api/v1/delete/playlist/", methods=["POST"])
+def delete_playlist():
+    """
+    API endpoint for deleting a playlist.
+    """
+    playlist_id = request.json["playlist"]
+    playlist = PlaylistManager.delete_playlist(playlist_id)
     return {"playlist": playlist}
 
 @app.route("/api/v1/playlists/", methods=["GET"])

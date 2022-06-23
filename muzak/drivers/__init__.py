@@ -330,7 +330,7 @@ class MuzakQL:
         for result in results.result_set:
             files.append(result["file_path"])
         new_values = query.subject[0]
-        for key, value in query.subject[0]:
+        for key, value in query.subject[0].items():
             if isinstance(new_values[key], list):
                 new_values[key] = new_values[key][0]
         self._storage_driver.update_files(files, query.subject[0])

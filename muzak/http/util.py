@@ -1,11 +1,14 @@
 from muzak import Muzak
 from pathlib import Path
 from clilib.config.config_loader import JSONConfigurationFile
+from clilib.util.logging import Logging
 import base64
 import random
 import string
 import time
 import json
+
+from muzak.drivers import MuzakStorageDriver
 
 def build_api_env():
     """
@@ -158,6 +161,7 @@ class Playlists:
         self.playlist_names = []
         self.api_home = build_api_env()
         self.api_data = self.api_home.joinpath("data")
+        self.logger = Logging("Muzak", "PlaylistManager").get_logger()
         self.load_playlists()
 
     def load_playlists(self):
@@ -167,7 +171,59 @@ class Playlists:
         playlist_path = self.api_data.joinpath("playlists.json")
         self.playlists = JSONConfigurationFile(playlist_path, {}, auto_create={})
 
-    def create_playlist(self, name, tracks = []):
+    def create_smart_playlist(self, playlist_name: str, rules: dict, storage_driver: MuzakStorageDriver):
+        """
+        Creates a smart playlist.
+        """
+        encoded_name = base64.b64encode(playlist_name.encode()).decode()
+        final = []
+        for path, tag in storage_driver.music.items():
+            for label, value in rules.items():
+                if label in tag:
+                    if value.lower() in tag[label].lower():
+                        _id = base64.b64encode(path.encode()).decode()
+                        if _id not in final:
+                            self.logger.info("Adding {} to smart playlist {}".format(_id, playlist_name))
+                            final.append(_id)
+        if encoded_name not in self.playlists:
+            self.playlists[encoded_name] = {
+                "tracks": final,
+                "name": playlist_name,
+                "description": "",
+                "metadata": {
+                    "smart": True,
+                    "rules": rules
+                }
+            }
+            self.playlists.write()
+            return self.playlists[encoded_name]
+        else:
+            return None
+
+    def update_smart_playlist(self, playlist_name: str, storage_driver: MuzakStorageDriver):
+        """
+        Updates a smart playlist.
+        """
+        encoded_name = base64.b64encode(playlist_name.encode()).decode()
+        if encoded_name in self.playlists:
+            if "smart" in self.playlists[encoded_name]["metadata"]:
+                if "rules" in self.playlists[encoded_name]["metadata"]:
+                    rules = self.playlists[encoded_name]["metadata"]["rules"]
+                    if self.playlists[encoded_name]["metadata"]["smart"]:
+                        final = []
+                        for path, tag in storage_driver.music.items():
+                            for label, value in rules.items():
+                                if label in tag:
+                                    if value.lower() in tag[label].lower():
+                                        _id = base64.b64encode(path.encode()).decode()
+                                        if _id not in final:
+                                            final.append(_id)
+                            self.playlists[encoded_name]["tracks"] = final
+                            self.playlists.write()
+                            return self.playlists[encoded_name]
+        return None
+
+    def create_playlist(self, name, tracks = [], metadata = {}):
         """
         Creates a new playlist.
         """
@@ -180,6 +236,7 @@ class Playlists:
                 "tracks": [],
                 "name": name,
                 "description": "",
+                "metadata": metadata
             }
         self.playlists.write()
         return encoded_name
