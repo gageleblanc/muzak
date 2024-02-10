@@ -18,7 +18,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/gageleblanc/muzak",
     packages=setuptools.find_packages(),
-    install_requires=['clilib>=3.5.1', 'pytaglib>=1.5.0', 'tabulate'],
+    install_requires=['clilib>=3.5.1', 'pytaglib>=1.5.0', 'spotipy', 'mutagen'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",
